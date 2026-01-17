@@ -6,6 +6,7 @@ func build(main: Node) -> void:
 	main.add_child(main._ui_layer)
 
 	main._hud_root = Control.new()
+	main._hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	main._hud_root.anchor_left = 0.0
 	main._hud_root.anchor_right = 1.0
 	main._hud_root.anchor_top = 0.0

@@ -1,31 +1,8 @@
-extends Node2D
+extends "res://scripts/ProjectileBase.gd"
 
-@export var speed := 320.0
-@export var damage := 1
-@export var hit_radius := 8.0
-
-var target: Node2D
-
-func _ready() -> void:
-	add_to_group("projectiles")
-
-func _process(delta: float) -> void:
-	if get_tree().paused:
-		return
-	if target == null or not is_instance_valid(target):
-		queue_free()
-		return
-
-	var to_target := target.position - position
-	var distance := to_target.length()
-	if distance <= hit_radius:
-		if target.has_method("take_damage"):
-			target.take_damage(damage)
-		queue_free()
-		return
-
-	position += to_target.normalized() * speed * delta
-	queue_redraw()
-
-func _draw() -> void:
-	draw_circle(Vector2.ZERO, 4.0, Color(0.2, 0.6, 1.0))
+func _init() -> void:
+	speed = 320.0
+	damage = 1
+	hit_radius = 8.0
+	draw_radius = 4.0
+	draw_color = Color(0.2, 0.6, 1.0)
