@@ -111,6 +111,8 @@ var _stones: Array[Node2D] = []
 var _stone_by_cell: Dictionary = {}
 var _resource_spawner: ResourceSpawner
 var _building_by_cell: Dictionary = {}
+var _enemy_towers: Array[Node2D] = []
+var _enemy_tower_by_cell: Dictionary = {}
 var _build_mode := "tower"
 var _has_archery_range := false
 var _has_archery_range_upgrade := false
@@ -373,6 +375,7 @@ func set_path_cells(cells: Array[Vector2i]) -> void:
 func _reset_game() -> void:
 	for node in get_tree().get_nodes_in_group("construction"):
 		node.queue_free()
+	_clear_enemy_towers()
 	_generate_random_path()
 	_rebuild_path()
 	if _resource_spawner != null:
@@ -1100,6 +1103,7 @@ func _set_editor_active(active: bool) -> void:
 		_clear_units()
 		_clear_constructions()
 		_clear_buildings()
+		_clear_enemy_towers()
 		if _resource_spawner != null:
 			_resource_spawner.clear_resources()
 		_clear_bases()
@@ -1170,6 +1174,9 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 			if _resource_spawner.remove_tree_at(cell) or _resource_spawner.remove_stone_at(cell):
 				queue_redraw()
 				return
+		if _remove_enemy_tower_at(cell):
+			queue_redraw()
+			return
 		if path_cells.has(cell):
 			path_cells.erase(cell)
 			_rebuild_path()
@@ -1193,6 +1200,12 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 		if not path_cells.has(cell):
 			path_cells.append(cell)
 		_rebuild_path()
+		queue_redraw()
+		return
+	if _editor_tool == "enemy_tower":
+		if not _can_place_enemy_tower(cell):
+			return
+		_place_enemy_tower(cell)
 		queue_redraw()
 		return
 	if _editor_tool == "tree" or _editor_tool == "stone":
@@ -1240,6 +1253,38 @@ func _is_in_enemy_zone(cell: Vector2i) -> bool:
 func _is_in_base_area(center: Vector2i, cell: Vector2i) -> bool:
 	return abs(center.x - cell.x) <= 1 and abs(center.y - cell.y) <= 1
 
+func _can_place_enemy_tower(cell: Vector2i) -> bool:
+	if not _is_in_bounds(cell):
+		return false
+	if _is_base_cell(cell):
+		return false
+	if path_cells.has(cell):
+		return false
+	if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+		return false
+	if _enemy_tower_by_cell.has(cell):
+		return false
+	return true
+
+func _place_enemy_tower(cell: Vector2i) -> void:
+	var script: Script = load("res://scripts/EnemyTower.gd")
+	var tower: Node2D = script.new() as Node2D
+	tower.set("cell", cell)
+	tower.set("cell_size", cell_size)
+	add_child(tower)
+	_enemy_towers.append(tower)
+	_enemy_tower_by_cell[cell] = tower
+
+func _remove_enemy_tower_at(cell: Vector2i) -> bool:
+	if not _enemy_tower_by_cell.has(cell):
+		return false
+	var tower: Node2D = _enemy_tower_by_cell[cell] as Node2D
+	_enemy_tower_by_cell.erase(cell)
+	if tower != null and is_instance_valid(tower):
+		_enemy_towers.erase(tower)
+		tower.queue_free()
+	return true
+
 func _draw_editor_hover() -> void:
 	if _editor_tool == "base_start" or _editor_tool == "base_end":
 		var cell := _mouse_cell()
@@ -1264,11 +1309,17 @@ func _draw_editor_hover() -> void:
 		if path_cells.has(cell) or _is_base_cell(cell):
 			valid = false
 		_draw_editor_square_top_left(cell, 2, valid)
+	elif _editor_tool == "enemy_tower":
+		var cell := _mouse_cell()
+		if not _is_in_bounds(cell):
+			return
+		var valid := _can_place_enemy_tower(cell)
+		_draw_editor_square(cell, 1, valid)
 	elif _editor_tool == "erase":
 		var cell := _mouse_cell()
 		if not _is_in_bounds(cell):
 			return
-		var valid := _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or path_cells.has(cell) or _is_base_cell(cell)
+		var valid := _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or path_cells.has(cell) or _is_base_cell(cell) or _enemy_tower_by_cell.has(cell)
 		_draw_editor_square(cell, 1, valid)
 
 func _mouse_cell() -> Vector2i:
@@ -1311,6 +1362,7 @@ func _build_map_data() -> Dictionary:
 		"base_end": [ _base_end_cell.x, _base_end_cell.y ],
 		"trees": _serialize_cells(_collect_resource_cells(_trees)),
 		"stones": _serialize_cells(_collect_resource_cells(_stones)),
+		"enemy_towers": _serialize_cells(_collect_enemy_tower_cells()),
 	}
 	return data
 
@@ -1330,6 +1382,11 @@ func _apply_map_data(data: Dictionary) -> bool:
 		var tree_cells := _parse_cells(data.get("trees", []))
 		var stone_cells := _parse_cells(data.get("stones", []))
 		_resource_spawner.spawn_from_cells(tree_cells, stone_cells)
+	_clear_enemy_towers()
+	var enemy_cells := _parse_cells(data.get("enemy_towers", []))
+	for cell in enemy_cells:
+		if _can_place_enemy_tower(cell):
+			_place_enemy_tower(cell)
 	queue_redraw()
 	return true
 
@@ -1348,6 +1405,12 @@ func _collect_resource_cells(nodes: Array[Node2D]) -> Array[Vector2i]:
 		if seen.has(cell):
 			continue
 		seen[cell] = true
+		cells.append(cell)
+	return cells
+
+func _collect_enemy_tower_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for cell in _enemy_tower_by_cell.keys():
 		cells.append(cell)
 	return cells
 
@@ -1402,6 +1465,7 @@ func _start_new_map() -> void:
 	_path_valid = false
 	_base_start_cell = Vector2i(-1, -1)
 	_base_end_cell = Vector2i(-1, -1)
+	_clear_enemy_towers()
 	if _resource_spawner != null:
 		_resource_spawner.clear_resources()
 	_clear_bases()
@@ -1427,6 +1491,13 @@ func _clear_buildings() -> void:
 	_has_archery_range_upgrade = false
 	if _economy != null:
 		_economy.set_archery_range_upgrade(false)
+
+func _clear_enemy_towers() -> void:
+	for tower in _enemy_towers:
+		if tower != null and is_instance_valid(tower):
+			tower.queue_free()
+	_enemy_towers.clear()
+	_enemy_tower_by_cell.clear()
 
 func _set_fast_forward(active: bool) -> void:
 	_fast_forward = active

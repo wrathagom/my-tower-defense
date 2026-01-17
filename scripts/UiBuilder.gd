@@ -318,6 +318,15 @@ func build(main: Node) -> void:
 	stone_button.pressed.connect(main._on_editor_tool_pressed.bind("stone"))
 	resource_row.add_child(stone_button)
 
+	var enemy_row: HBoxContainer = HBoxContainer.new()
+	enemy_row.add_theme_constant_override("separation", 6)
+	editor_box.add_child(enemy_row)
+
+	var enemy_tower_button: Button = Button.new()
+	enemy_tower_button.text = "Enemy Tower"
+	enemy_tower_button.pressed.connect(main._on_editor_tool_pressed.bind("enemy_tower"))
+	enemy_row.add_child(enemy_tower_button)
+
 	var erase_button: Button = Button.new()
 	erase_button.text = "Erase"
 	erase_button.pressed.connect(main._on_editor_tool_pressed.bind("erase"))

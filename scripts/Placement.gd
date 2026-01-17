@@ -265,6 +265,8 @@ func _can_place_structure(top_left: Vector2i, size: int) -> bool:
 				return false
 			if main._stone_by_cell.has(cell):
 				return false
+			if main._enemy_tower_by_cell.has(cell):
+				return false
 			if main._building_by_cell.has(cell):
 				return false
 	return true

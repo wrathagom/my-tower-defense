@@ -162,6 +162,8 @@ func _place_tree(top_left: Vector2i) -> bool:
 			return false
 		if main._stone_by_cell.has(cell):
 			return false
+		if main._enemy_tower_by_cell.has(cell):
+			return false
 		if main._tree_by_cell.has(cell):
 			return false
 	var tree: Node2D = preload("res://scenes/Tree.tscn").instantiate() as Node2D
@@ -214,6 +216,8 @@ func _place_stone(top_left: Vector2i) -> bool:
 		if main._tree_by_cell.has(cell):
 			return false
 		if main._stone_by_cell.has(cell):
+			return false
+		if main._enemy_tower_by_cell.has(cell):
 			return false
 	var stone: Node2D = preload("res://scenes/Stone.tscn").instantiate() as Node2D
 	stone.set("cell", top_left)
