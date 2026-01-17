@@ -10,6 +10,10 @@ func _init() -> void:
 		failed += 1
 	if not _test_unit_limits():
 		failed += 1
+	if not _test_unit_catalog():
+		failed += 1
+	if not _test_building_catalog():
+		failed += 1
 
 	if failed > 0:
 		print("Tests failed: %d" % failed)
@@ -107,3 +111,53 @@ func _test_unit_limits() -> bool:
 	var ok: bool = economy.current_units == 0
 	economy.free()
 	return ok
+
+func _test_unit_catalog() -> bool:
+	var UnitCatalogScript: Script = preload("res://scripts/UnitCatalog.gd")
+	var MainScript: Script = preload("res://scripts/Main.gd")
+	var main: Node = MainScript.new()
+	var catalog: Node = UnitCatalogScript.new()
+	var defs: Dictionary = catalog.build_defs(main)
+	var order: Array[String] = catalog.get_order()
+	if order.is_empty():
+		main.free()
+		catalog.free()
+		return false
+	for unit_id in order:
+		if not defs.has(unit_id):
+			main.free()
+			catalog.free()
+			return false
+		var def: Dictionary = defs[unit_id]
+		if str(def.get("scene", "")) == "":
+			main.free()
+			catalog.free()
+			return false
+	main.free()
+	catalog.free()
+	return true
+
+func _test_building_catalog() -> bool:
+	var BuildingCatalogScript: Script = preload("res://scripts/BuildingCatalog.gd")
+	var MainScript: Script = preload("res://scripts/Main.gd")
+	var main: Node = MainScript.new()
+	var catalog: Node = BuildingCatalogScript.new()
+	var defs: Dictionary = catalog.build_defs(main)
+	var order: Array[String] = catalog.get_order()
+	if order.is_empty():
+		main.free()
+		catalog.free()
+		return false
+	for building_id in order:
+		if not defs.has(building_id):
+			main.free()
+			catalog.free()
+			return false
+		var def: Dictionary = defs[building_id]
+		if str(def.get("path", "")) == "":
+			main.free()
+			catalog.free()
+			return false
+	main.free()
+	catalog.free()
+	return true

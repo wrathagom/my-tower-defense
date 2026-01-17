@@ -9,19 +9,25 @@ func setup(main_node: Node) -> void:
 	rng = RandomNumberGenerator.new()
 
 func spawn_resources() -> void:
+	_clear_trees()
 	_clear_stones()
-	_spawn_trees()
-	_spawn_stones()
+	var has_tree_in_zone: bool = _spawn_trees()
+	if not has_tree_in_zone:
+		_find_any_player_zone_cell()
+	var has_stone_in_band: bool = _spawn_stones()
+	if not has_stone_in_band:
+		_find_any_stone_band_cell()
 
-func _spawn_trees() -> void:
+func _clear_trees() -> void:
 	for tree in main._trees:
 		if tree != null and is_instance_valid(tree):
 			tree.queue_free()
 	main._trees.clear()
 	main._tree_by_cell.clear()
 
+func _spawn_trees() -> bool:
 	if main.grid_width < 2 or main.grid_height < 2:
-		return
+		return false
 
 	_seed_rng(97)
 
@@ -39,12 +45,11 @@ func _spawn_trees() -> void:
 			placed += 1
 			if main._is_in_player_zone(cell):
 				ensured = true
-	if not ensured:
-		_find_any_player_zone_cell()
+	return ensured
 
-func _spawn_stones() -> void:
+func _spawn_stones() -> bool:
 	if main.grid_width < 2 or main.grid_height < 2:
-		return
+		return false
 
 	_seed_rng(181)
 
@@ -62,8 +67,7 @@ func _spawn_stones() -> void:
 			placed += 1
 			if main._is_in_stone_band(cell):
 				ensured = true
-	if not ensured:
-		_find_any_stone_band_cell()
+	return ensured
 
 func _clear_stones() -> void:
 	for stone in main._stones:
@@ -95,6 +99,8 @@ func _place_tree(top_left: Vector2i) -> bool:
 	]
 	for cell in cells:
 		if not main._is_in_bounds(cell):
+			return false
+		if main._is_base_cell(cell):
 			return false
 		if main._is_path_cell(cell):
 			return false
@@ -144,6 +150,8 @@ func _place_stone(top_left: Vector2i) -> bool:
 	]
 	for cell in cells:
 		if not main._is_in_bounds(cell):
+			return false
+		if main._is_base_cell(cell):
 			return false
 		if main._is_path_cell(cell):
 			return false

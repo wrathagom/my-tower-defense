@@ -29,6 +29,8 @@ func _ready() -> void:
 	position = _path_position + _jitter
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return
 	if _try_attack(delta):
 		return
 	if path_points.is_empty():

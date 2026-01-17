@@ -4,316 +4,214 @@ var main: Node
 var economy: Node
 
 var hover_cell := Vector2i(-1, -1)
-var hover_valid := false
-var hover_tree_top_left := Vector2i(-1, -1)
-var hover_tree_valid := false
-var hover_stone_top_left := Vector2i(-1, -1)
-var hover_stone_valid := false
+var hover_resource_top_left := Vector2i(-1, -1)
+var hover_resource_valid := false
+var hover_resource_size := 2
 var hover_build_top_left := Vector2i(-1, -1)
 var hover_build_valid := false
+var hover_build_size := 1
 
 func setup(main_node: Node, economy_node: Node) -> void:
 	main = main_node
 	economy = economy_node
 
 func handle_build_click(world_pos: Vector2, mode: String) -> bool:
-	if mode == "woodcutter":
-		return _try_build_woodcutter_at(world_pos)
-	if mode == "stonecutter":
-		return _try_build_stonecutter_at(world_pos)
-	if mode == "archery_range":
-		return _try_build_archery_range_at(world_pos)
-	if mode == "house":
-		return _try_build_house_at(world_pos)
-	if mode == "farm":
-		return _try_build_farm_at(world_pos)
-	if mode == "wood_storage":
-		return _try_build_wood_storage_at(world_pos)
-	if mode == "food_storage":
-		return _try_build_food_storage_at(world_pos)
-	if mode == "stone_storage":
-		return _try_build_stone_storage_at(world_pos)
-	return _place_tower_at(world_pos)
+	var def: Dictionary = main._building_defs.get(mode, {})
+	if def.is_empty():
+		return false
+	var placement: String = str(def.get("placement", "grid"))
+	if placement == "tree" or placement == "stone":
+		return _try_build_resource(def, world_pos)
+	return _try_build_grid(def, world_pos)
 
 func update_hover(world_pos: Vector2, mode: String) -> void:
 	var cell := Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
 	if not main._is_in_bounds(cell):
 		if hover_cell != Vector2i(-1, -1):
 			hover_cell = Vector2i(-1, -1)
-			hover_tree_top_left = Vector2i(-1, -1)
-			hover_stone_top_left = Vector2i(-1, -1)
+			hover_resource_top_left = Vector2i(-1, -1)
+			hover_resource_valid = false
 			hover_build_top_left = Vector2i(-1, -1)
+			hover_build_valid = false
 			main.queue_redraw()
 		return
 	hover_cell = cell
-	if mode == "woodcutter":
-		_update_tree_hover(cell)
+	var def: Dictionary = main._building_defs.get(mode, {})
+	if def.is_empty():
+		hover_resource_top_left = Vector2i(-1, -1)
+		hover_resource_valid = false
+		hover_build_top_left = Vector2i(-1, -1)
+		hover_build_valid = false
+		main.queue_redraw()
 		return
-	if mode == "stonecutter":
-		_update_stone_hover(cell)
+	var placement: String = str(def.get("placement", "grid"))
+	if placement == "tree" or placement == "stone":
+		_update_resource_hover(cell, def)
 		return
-	if mode == "house" or mode == "farm" or mode == "wood_storage" or mode == "food_storage" or mode == "stone_storage":
-		_update_building_hover(cell, mode)
-		return
-	if mode == "archery_range":
-		_update_building_hover(cell, mode)
-		return
-	hover_tree_top_left = Vector2i(-1, -1)
-	hover_valid = not main._is_path_cell(cell) \
-		and not main._occupied.has(cell) \
-		and not main._tree_by_cell.has(cell) \
-		and not main._stone_by_cell.has(cell) \
-		and not main._building_by_cell.has(cell) \
-		and main._is_in_player_zone(cell)
+	_update_grid_hover(cell, def)
 	main.queue_redraw()
 
 func draw_hover(drawer: Node2D, mode: String) -> void:
 	if hover_cell == Vector2i(-1, -1):
 		return
-	if mode == "woodcutter":
-		_draw_tree_hover(drawer)
+	if hover_resource_top_left != Vector2i(-1, -1):
+		_draw_resource_hover(drawer)
 		return
-	if mode == "stonecutter":
-		_draw_stone_hover(drawer)
-		return
-	if mode == "house" or mode == "farm" or mode == "wood_storage" or mode == "food_storage" or mode == "stone_storage":
+	if hover_build_top_left != Vector2i(-1, -1):
 		_draw_building_hover(drawer)
-		return
-	if mode == "archery_range":
-		_draw_building_hover(drawer)
-		return
-	var color := Color(0.2, 0.8, 0.3, 0.5) if hover_valid else Color(0.9, 0.2, 0.2, 0.5)
-	var rect := Rect2(hover_cell.x * main.cell_size, hover_cell.y * main.cell_size, main.cell_size, main.cell_size)
-	drawer.draw_rect(rect, color, true)
-	drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
-func _update_tree_hover(cell: Vector2i) -> void:
-	if not main._tree_by_cell.has(cell):
-		hover_tree_top_left = Vector2i(-1, -1)
+func _update_resource_hover(cell: Vector2i, def: Dictionary) -> void:
+	hover_build_top_left = Vector2i(-1, -1)
+	hover_build_valid = false
+	var placement: String = str(def.get("placement", ""))
+	var resource_map: Dictionary = main._tree_by_cell if placement == "tree" else main._stone_by_cell
+	if not resource_map.has(cell):
+		hover_resource_top_left = Vector2i(-1, -1)
+		hover_resource_valid = false
 		main.queue_redraw()
 		return
-	var tree: Node2D = main._tree_by_cell[cell] as Node2D
-	var top_left: Vector2i = tree.get("cell")
-	hover_tree_top_left = top_left
-	var has_cutter: bool = tree.get("has_cutter") == true
-	hover_tree_valid = main._is_in_player_zone(cell) and not has_cutter and economy.can_afford_wood(main.woodcutter_cost)
+	var resource: Node2D = resource_map[cell] as Node2D
+	var top_left: Vector2i = resource.get("cell")
+	hover_resource_top_left = top_left
+	hover_resource_size = int(def.get("size", 2))
+	var has_cutter: bool = resource.get("has_cutter") != null and resource.get("has_cutter") != false
+	var min_level: int = def.get("min_base_level", 1)
+	hover_resource_valid = main._is_in_player_zone(cell) and main._base_level >= min_level and not has_cutter and economy.can_afford_cost(def)
 	main.queue_redraw()
 
-func _draw_tree_hover(drawer: Node2D) -> void:
-	if hover_tree_top_left == Vector2i(-1, -1):
+func _draw_resource_hover(drawer: Node2D) -> void:
+	if hover_resource_top_left == Vector2i(-1, -1):
 		return
-	var color := Color(0.2, 0.8, 0.3, 0.4) if hover_tree_valid else Color(0.9, 0.2, 0.2, 0.4)
-	var cells := [
-		hover_tree_top_left,
-		hover_tree_top_left + Vector2i(1, 0),
-		hover_tree_top_left + Vector2i(0, 1),
-		hover_tree_top_left + Vector2i(1, 1),
-	]
-	for cell in cells:
-		var rect := Rect2(cell.x * main.cell_size, cell.y * main.cell_size, main.cell_size, main.cell_size)
-		drawer.draw_rect(rect, color, true)
-		drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
+	var color := Color(0.2, 0.8, 0.3, 0.4) if hover_resource_valid else Color(0.9, 0.2, 0.2, 0.4)
+	for x in range(hover_resource_size):
+		for y in range(hover_resource_size):
+			var cell := hover_resource_top_left + Vector2i(x, y)
+			var rect := Rect2(cell.x * main.cell_size, cell.y * main.cell_size, main.cell_size, main.cell_size)
+			drawer.draw_rect(rect, color, true)
+			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
-func _update_stone_hover(cell: Vector2i) -> void:
-	if not main._stone_by_cell.has(cell):
-		hover_stone_top_left = Vector2i(-1, -1)
-		main.queue_redraw()
-		return
-	var stone: Node2D = main._stone_by_cell[cell] as Node2D
-	var top_left: Vector2i = stone.get("cell")
-	hover_stone_top_left = top_left
-	var has_cutter: bool = stone.get("has_cutter") == true
-	hover_stone_valid = main._is_in_player_zone(cell) and main._base_level >= 2 and not has_cutter and economy.can_afford_wood(main.stonecutter_cost)
-	main.queue_redraw()
-
-func _draw_stone_hover(drawer: Node2D) -> void:
-	if hover_stone_top_left == Vector2i(-1, -1):
-		return
-	var color := Color(0.2, 0.8, 0.3, 0.4) if hover_stone_valid else Color(0.9, 0.2, 0.2, 0.4)
-	var cells := [
-		hover_stone_top_left,
-		hover_stone_top_left + Vector2i(1, 0),
-		hover_stone_top_left + Vector2i(0, 1),
-		hover_stone_top_left + Vector2i(1, 1),
-	]
-	for cell in cells:
-		var rect := Rect2(cell.x * main.cell_size, cell.y * main.cell_size, main.cell_size, main.cell_size)
-		drawer.draw_rect(rect, color, true)
-		drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
-
-func _update_building_hover(cell: Vector2i, mode: String) -> void:
+func _update_grid_hover(cell: Vector2i, def: Dictionary) -> void:
+	hover_resource_top_left = Vector2i(-1, -1)
+	hover_resource_valid = false
 	hover_build_top_left = cell
-	var has_resources := true
-	if mode == "house":
-		has_resources = economy.can_afford_wood(main.house_cost)
-	elif mode == "farm":
-		has_resources = economy.can_afford_wood(main.farm_cost)
-	elif mode == "wood_storage":
-		has_resources = economy.can_afford_wood(main.wood_storage_cost)
-	elif mode == "food_storage":
-		has_resources = economy.can_afford_wood(main.food_storage_cost)
-	elif mode == "stone_storage":
-		has_resources = economy.can_afford_wood(main.stone_storage_cost)
-	elif mode == "archery_range":
-		has_resources = economy.can_afford_wood(main.archery_range_cost)
-	var size := 2
-	if mode == "archery_range":
-		size = 3
-	hover_build_valid = _can_place_structure(cell, size) and has_resources
+	hover_build_size = int(def.get("size", 1))
+	var min_level: int = def.get("min_base_level", 1)
+	var has_resources: bool = economy.can_afford_cost(def)
+	hover_build_valid = _can_place_structure(cell, hover_build_size) and main._base_level >= min_level and has_resources
 	main.queue_redraw()
 
 func _draw_building_hover(drawer: Node2D) -> void:
 	if hover_build_top_left == Vector2i(-1, -1):
 		return
 	var color := Color(0.2, 0.8, 0.3, 0.4) if hover_build_valid else Color(0.9, 0.2, 0.2, 0.4)
-	var size := 2
-	if main._build_mode == "archery_range":
-		size = 3
-	for x in range(size):
-		for y in range(size):
+	for x in range(hover_build_size):
+		for y in range(hover_build_size):
 			var cell := hover_build_top_left + Vector2i(x, y)
 			var rect := Rect2(cell.x * main.cell_size, cell.y * main.cell_size, main.cell_size, main.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
-func _place_tower_at(world_pos: Vector2) -> bool:
-	var cell := Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not main._is_in_bounds(cell):
-		return false
-	if main._is_path_cell(cell):
-		return false
-	if main._tree_by_cell.has(cell):
-		return false
-	if main._stone_by_cell.has(cell):
-		return false
-	if main._building_by_cell.has(cell):
-		return false
-	if main._occupied.has(cell):
-		return false
-	if not main._is_in_player_zone(cell):
-		return false
-	if not economy.spend_wood(main.tower_cost):
-		return false
-
-	var tower := preload("res://scripts/Tower.gd").new()
-	tower.cell = cell
-	tower.cell_size = main.cell_size
-	main.add_child(tower)
-	main._occupied[cell] = tower
-	return true
-
-func _try_build_woodcutter_at(world_pos: Vector2) -> bool:
+func _try_build_grid(def: Dictionary, world_pos: Vector2) -> bool:
 	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not main._tree_by_cell.has(cell):
+	var size: int = int(def.get("size", 1))
+	if not _can_place_structure(cell, size):
 		return false
-	if not main._is_in_player_zone(cell):
+	var min_level: int = def.get("min_base_level", 1)
+	if main._base_level < min_level:
 		return false
-	var tree: Node2D = main._tree_by_cell[cell] as Node2D
-	if tree.get("has_cutter") == true:
+	if not economy.can_afford_cost(def):
 		return false
-	if not economy.spend_wood(main.woodcutter_cost):
+	if not economy.spend_cost(def):
 		return false
-	_attach_woodcutter(tree)
+	var build_time: float = float(def.get("build_time", 0.0))
+	var construction: Node2D = _start_construction(cell, size, build_time)
+	construction.completed.connect(Callable(self, "_finish_grid_building").bind(construction, def, cell, size))
+	for x in range(size):
+		for y in range(size):
+			var grid_cell := cell + Vector2i(x, y)
+			main._building_by_cell[grid_cell] = construction
+	if def.get("uses_occupied", false):
+		main._occupied[cell] = construction
 	return true
 
-func _try_build_stonecutter_at(world_pos: Vector2) -> bool:
+func _try_build_resource(def: Dictionary, world_pos: Vector2) -> bool:
 	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not main._stone_by_cell.has(cell):
-		return false
-	if main._base_level < 2:
+	var placement: String = str(def.get("placement", ""))
+	var resource_map: Dictionary = main._tree_by_cell if placement == "tree" else main._stone_by_cell
+	if not resource_map.has(cell):
 		return false
 	if not main._is_in_player_zone(cell):
 		return false
-	var stone: Node2D = main._stone_by_cell[cell] as Node2D
-	if stone.get("has_cutter") == true:
+	var min_level: int = def.get("min_base_level", 1)
+	if main._base_level < min_level:
 		return false
-	if not economy.spend_wood(main.stonecutter_cost):
+	var resource: Node2D = resource_map[cell] as Node2D
+	if resource.get("has_cutter"):
 		return false
-	_attach_stonecutter(stone)
+	if not economy.can_afford_cost(def):
+		return false
+	if not economy.spend_cost(def):
+		return false
+	resource.set("has_cutter", "building")
+	var top_left: Vector2i = resource.get("cell")
+	var size: int = int(def.get("size", 2))
+	var build_time: float = float(def.get("build_time", 0.0))
+	var construction: Node2D = _start_construction(top_left, size, build_time)
+	construction.completed.connect(Callable(self, "_finish_resource_building").bind(construction, def, resource))
 	return true
 
-func _attach_woodcutter(tree: Node2D) -> void:
-	var cutter := preload("res://scenes/Woodcutter.tscn").instantiate()
+func _finish_grid_building(construction: Node2D, def: Dictionary, top_left: Vector2i, size: int) -> void:
+	_clear_construction_cells(top_left, size, construction)
+	var spawn_type: String = str(def.get("spawn_type", "scene"))
+	var path: String = str(def.get("path", ""))
+	var building: Node2D = null
+	if spawn_type == "script":
+		var script: Script = load(path)
+		building = script.new() as Node2D
+		building.set("cell", top_left)
+		building.set("cell_size", main.cell_size)
+		main.add_child(building)
+	else:
+		building = _place_structure(path, top_left, size)
+	_apply_building_effect(def, building)
+	if def.get("uses_occupied", false):
+		if main._occupied.get(top_left) == construction:
+			main._occupied[top_left] = building
+
+func _finish_resource_building(_construction: Node2D, def: Dictionary, resource: Node2D) -> void:
+	if resource == null or not is_instance_valid(resource):
+		return
+	var path: String = str(def.get("path", ""))
+	var cutter: Node2D = load(path).instantiate() as Node2D
 	cutter.cell_size = main.cell_size
 	cutter.position = Vector2(main.cell_size, main.cell_size)
-	cutter.wood_produced.connect(_on_wood_produced)
-	tree.add_child(cutter)
-	tree.set("has_cutter", true)
+	var kind: String = str(def.get("resource_kind", ""))
+	if kind == "wood":
+		cutter.wood_produced.connect(_on_wood_produced)
+	elif kind == "stone":
+		cutter.stone_produced.connect(_on_stone_produced)
+	resource.add_child(cutter)
+	resource.set("has_cutter", true)
 
-func _attach_stonecutter(stone: Node2D) -> void:
-	var cutter := preload("res://scenes/Stonecutter.tscn").instantiate()
-	cutter.cell_size = main.cell_size
-	cutter.position = Vector2(main.cell_size, main.cell_size)
-	cutter.stone_produced.connect(_on_stone_produced)
-	stone.add_child(cutter)
-	stone.set("has_cutter", true)
-
-func _on_wood_produced(amount: int) -> void:
-	economy.add_wood(amount)
-
-func _on_stone_produced(amount: int) -> void:
-	economy.add_stone(amount)
-
-func _try_build_house_at(world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not _can_place_structure(cell, 2):
-		return false
-	if not economy.spend_wood(main.house_cost):
-		return false
-	_place_structure("res://scenes/House.tscn", cell, 2)
-	economy.add_unit_capacity(main.house_capacity)
-	return true
-
-func _try_build_farm_at(world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not _can_place_structure(cell, 2):
-		return false
-	if not economy.spend_wood(main.farm_cost):
-		return false
-	var farm: Node2D = _place_structure("res://scenes/Farm.tscn", cell, 2)
-	farm.food_produced.connect(_on_food_produced)
-	return true
-
-func _try_build_wood_storage_at(world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not _can_place_structure(cell, 2):
-		return false
-	if not economy.spend_wood(main.wood_storage_cost):
-		return false
-	_place_structure("res://scenes/WoodStorage.tscn", cell, 2)
-	economy.add_wood_cap(main.storage_capacity)
-	return true
-
-func _try_build_food_storage_at(world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not _can_place_structure(cell, 2):
-		return false
-	if not economy.spend_wood(main.food_storage_cost):
-		return false
-	_place_structure("res://scenes/FoodStorage.tscn", cell, 2)
-	economy.add_food_cap(main.storage_capacity)
-	return true
-
-func _try_build_stone_storage_at(world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not _can_place_structure(cell, 2):
-		return false
-	if not economy.spend_wood(main.stone_storage_cost):
-		return false
-	_place_structure("res://scenes/StoneStorage.tscn", cell, 2)
-	economy.add_stone_cap(main.storage_capacity)
-	return true
-
-func _try_build_archery_range_at(world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
-	if not _can_place_structure(cell, 3):
-		return false
-	if not economy.spend_wood(main.archery_range_cost):
-		return false
-	_place_structure("res://scenes/ArcheryRange.tscn", cell, 3)
-	main._has_archery_range = true
-	economy.update_buttons_for_base_level(main._base_level, main._has_archery_range)
-	return true
+func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
+	if building == null:
+		return
+	var effect: String = str(def.get("effect", ""))
+	if effect == "house":
+		economy.add_unit_capacity(main.house_capacity)
+	elif effect == "farm":
+		if building.has_signal("food_produced"):
+			building.food_produced.connect(_on_food_produced)
+	elif effect == "wood_storage":
+		economy.add_wood_cap(main.storage_capacity)
+	elif effect == "food_storage":
+		economy.add_food_cap(main.storage_capacity)
+	elif effect == "stone_storage":
+		economy.add_stone_cap(main.storage_capacity)
+	elif effect == "archery_range":
+		main._has_archery_range = true
+		main._register_archery_range(building)
+		economy.update_buttons_for_base_level(main._base_level, main._has_archery_range, main._has_archery_range_upgrade)
 
 func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node2D:
 	var building: Node2D = load(scene_path).instantiate() as Node2D
@@ -325,6 +223,31 @@ func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node
 			var cell := top_left + Vector2i(x, y)
 			main._building_by_cell[cell] = building
 	return building
+
+func _start_construction(top_left: Vector2i, size: int, duration: float) -> Node2D:
+	var ConstructionScript: Script = load("res://scripts/Construction.gd")
+	var construction: Node2D = ConstructionScript.new()
+	construction.cell_size = main.cell_size
+	construction.size_cells = size
+	construction.duration = duration
+	construction.position = Vector2(top_left.x * main.cell_size, top_left.y * main.cell_size)
+	main.add_child(construction)
+	return construction
+
+func _finish_tower(construction: Node2D, cell: Vector2i) -> void:
+	var tower := preload("res://scripts/Tower.gd").new()
+	tower.cell = cell
+	tower.cell_size = main.cell_size
+	main.add_child(tower)
+	if main._occupied.get(cell) == construction:
+		main._occupied[cell] = tower
+
+func _clear_construction_cells(top_left: Vector2i, size: int, construction: Node2D) -> void:
+	for x in range(size):
+		for y in range(size):
+			var cell := top_left + Vector2i(x, y)
+			if main._building_by_cell.get(cell) == construction:
+				main._building_by_cell.erase(cell)
 
 func _can_place_structure(top_left: Vector2i, size: int) -> bool:
 	for x in range(size):
@@ -348,3 +271,9 @@ func _can_place_structure(top_left: Vector2i, size: int) -> bool:
 
 func _on_food_produced(amount: int) -> void:
 	economy.add_food(amount)
+
+func _on_wood_produced(amount: int) -> void:
+	economy.add_wood(amount)
+
+func _on_stone_produced(amount: int) -> void:
+	economy.add_stone(amount)

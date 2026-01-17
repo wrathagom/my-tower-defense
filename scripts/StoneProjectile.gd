@@ -10,6 +10,8 @@ func _ready() -> void:
 	add_to_group("projectiles")
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return
 	if target == null or not is_instance_valid(target):
 		queue_free()
 		return

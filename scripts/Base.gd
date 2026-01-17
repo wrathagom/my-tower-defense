@@ -6,6 +6,8 @@ class_name Base
 @export var max_hp := 25
 var _hp := 0
 var _dead := false
+var _show_upgrade_indicator := false
+var _can_upgrade := false
 
 signal died
 
@@ -34,6 +36,11 @@ func reset_hp() -> void:
 	_hp = max_hp
 	queue_redraw()
 
+func set_upgrade_indicator(show: bool, can_upgrade: bool) -> void:
+	_show_upgrade_indicator = show
+	_can_upgrade = can_upgrade
+	queue_redraw()
+
 func _draw() -> void:
 	var half := size * 0.5
 	var body_color := Color(0.3, 0.3, 0.6) if is_goal else Color(0.2, 0.5, 0.2)
@@ -42,6 +49,8 @@ func _draw() -> void:
 	draw_rect(rect, body_color, true)
 	draw_rect(rect, border_color, false, 2.0)
 	_draw_health_bar()
+	if _show_upgrade_indicator:
+		_draw_upgrade_indicator()
 
 func _draw_health_bar() -> void:
 	var bar_width := size * 0.8
@@ -54,3 +63,14 @@ func _draw_health_bar() -> void:
 	var fill_rect := Rect2(bar_offset, Vector2(bar_width * ratio, bar_height))
 	draw_rect(back_rect, back_color, true)
 	draw_rect(fill_rect, fill_color, true)
+
+func _draw_upgrade_indicator() -> void:
+	var arrow_size := size * 0.35
+	var offset := Vector2.ZERO
+	var color := Color(0.2, 0.9, 0.3, 0.9) if _can_upgrade else Color(0.5, 0.5, 0.5, 0.6)
+	var points := PackedVector2Array([
+		offset + Vector2(0, -arrow_size * 0.6),
+		offset + Vector2(-arrow_size * 0.5, arrow_size * 0.4),
+		offset + Vector2(arrow_size * 0.5, arrow_size * 0.4),
+	])
+	draw_polygon(points, PackedColorArray([color, color, color]))

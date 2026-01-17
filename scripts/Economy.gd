@@ -12,6 +12,8 @@ var current_units: int = 0
 var unit_food_cost: int = 0
 var stone_thrower_food_cost: int = 0
 var stone_thrower_stone_cost: int = 0
+var archer_food_cost: int = 0
+var archer_wood_cost: int = 0
 var tower_cost: int = 0
 var woodcutter_cost: int = 0
 var stonecutter_cost: int = 0
@@ -28,20 +30,15 @@ var wood_label: Label
 var food_label: Label
 var stone_label: Label
 var unit_label: Label
-var spawn_unit_button: Button
-var spawn_stone_thrower_button: Button
+var spawn_buttons: Dictionary = {}
+var unit_defs: Dictionary = {}
+var build_buttons: Dictionary = {}
+var build_defs: Dictionary = {}
 var has_archery_range: bool = false
-var tower_button: Button
-var woodcutter_button: Button
-var stonecutter_button: Button
-var archery_range_button: Button
-var house_button: Button
-var farm_button: Button
-var wood_storage_button: Button
-var food_storage_button: Button
-var stone_storage_button: Button
+var has_archery_range_upgrade: bool = false
 var upgrade_button: Button
 var base_level: int = 1
+var base_upgrade_in_progress: bool = false
 
 func configure_resources(
 	starting_wood: int,
@@ -73,6 +70,8 @@ func set_costs(values: Dictionary) -> void:
 	base_upgrade_stone_cost = values.get("base_upgrade_stone_cost", 0)
 	stone_thrower_food_cost = values.get("stone_thrower_food_cost", 0)
 	stone_thrower_stone_cost = values.get("stone_thrower_stone_cost", 0)
+	archer_food_cost = values.get("archer_food_cost", 0)
+	archer_wood_cost = values.get("archer_wood_cost", 0)
 
 func set_labels(
 	wood_label_value: Label,
@@ -86,33 +85,22 @@ func set_labels(
 	unit_label = unit_label_value
 	_update_labels()
 
-func set_buttons(
-	spawn_unit_button_value: Button,
-	spawn_stone_thrower_button_value: Button,
-	tower_button_value: Button,
-	woodcutter_button_value: Button,
-	stonecutter_button_value: Button,
-	archery_range_button_value: Button,
-	house_button_value: Button,
-	farm_button_value: Button,
-	wood_storage_button_value: Button,
-	food_storage_button_value: Button,
-	stone_storage_button_value: Button,
-	upgrade_button_value: Button
-) -> void:
-	spawn_unit_button = spawn_unit_button_value
-	spawn_stone_thrower_button = spawn_stone_thrower_button_value
-	tower_button = tower_button_value
-	woodcutter_button = woodcutter_button_value
-	stonecutter_button = stonecutter_button_value
-	archery_range_button = archery_range_button_value
-	house_button = house_button_value
-	farm_button = farm_button_value
-	wood_storage_button = wood_storage_button_value
-	food_storage_button = food_storage_button_value
-	stone_storage_button = stone_storage_button_value
+func set_build_buttons(buttons: Dictionary, upgrade_button_value: Button) -> void:
+	build_buttons = buttons
 	upgrade_button = upgrade_button_value
 	_update_buttons(1)
+
+func set_build_defs(defs: Dictionary) -> void:
+	build_defs = defs
+	_update_buttons(base_level)
+
+func set_spawn_buttons(buttons: Dictionary) -> void:
+	spawn_buttons = buttons
+	_update_buttons(base_level)
+
+func set_unit_defs(defs: Dictionary) -> void:
+	unit_defs = defs
+	_update_buttons(base_level)
 
 func add_wood(amount: int) -> void:
 	wood = clampi(wood + amount, 0, max_wood)
@@ -143,11 +131,40 @@ func spend_stone(amount: int) -> bool:
 func can_afford_wood(amount: int) -> bool:
 	return wood >= amount
 
+func can_afford_cost(def: Dictionary) -> bool:
+	var costs: Dictionary = def.get("costs", {})
+	var food_cost: int = costs.get("food", 0)
+	var wood_cost: int = costs.get("wood", 0)
+	var stone_cost: int = costs.get("stone", 0)
+	return food >= food_cost and wood >= wood_cost and stone >= stone_cost
+
+func spend_cost(def: Dictionary) -> bool:
+	if not can_afford_cost(def):
+		return false
+	var costs: Dictionary = def.get("costs", {})
+	var food_cost: int = costs.get("food", 0)
+	var wood_cost: int = costs.get("wood", 0)
+	var stone_cost: int = costs.get("stone", 0)
+	food = clampi(food - food_cost, 0, max_food)
+	wood = clampi(wood - wood_cost, 0, max_wood)
+	stone = clampi(stone - stone_cost, 0, max_stone)
+	_update_all()
+	return true
+
 func can_spawn_unit() -> bool:
 	return food >= unit_food_cost and current_units < max_units
 
 func can_spawn_stone_thrower() -> bool:
 	return food >= stone_thrower_food_cost and stone >= stone_thrower_stone_cost and current_units < max_units
+
+func can_spawn_archer() -> bool:
+	return food >= archer_food_cost and wood >= archer_wood_cost and current_units < max_units
+
+func can_spawn_unit_def(def: Dictionary) -> bool:
+	var food_cost: int = def.get("food_cost", 0)
+	var wood_cost: int = def.get("wood_cost", 0)
+	var stone_cost: int = def.get("stone_cost", 0)
+	return food >= food_cost and wood >= wood_cost and stone >= stone_cost and current_units < max_units
 
 func on_unit_spawned() -> void:
 	food = clampi(food - unit_food_cost, 0, max_food)
@@ -157,6 +174,22 @@ func on_unit_spawned() -> void:
 func on_stone_thrower_spawned() -> void:
 	food = clampi(food - stone_thrower_food_cost, 0, max_food)
 	stone = clampi(stone - stone_thrower_stone_cost, 0, max_stone)
+	current_units += 1
+	_update_all()
+
+func on_archer_spawned() -> void:
+	food = clampi(food - archer_food_cost, 0, max_food)
+	wood = clampi(wood - archer_wood_cost, 0, max_wood)
+	current_units += 1
+	_update_all()
+
+func on_unit_spawned_def(def: Dictionary) -> void:
+	var food_cost: int = def.get("food_cost", 0)
+	var wood_cost: int = def.get("wood_cost", 0)
+	var stone_cost: int = def.get("stone_cost", 0)
+	food = clampi(food - food_cost, 0, max_food)
+	wood = clampi(wood - wood_cost, 0, max_wood)
+	stone = clampi(stone - stone_cost, 0, max_stone)
 	current_units += 1
 	_update_all()
 
@@ -187,9 +220,18 @@ func add_stone_cap(amount: int) -> void:
 	stone = clampi(stone, 0, max_stone)
 	_update_all()
 
-func update_buttons_for_base_level(base_level_value: int, has_archery_range_value: bool) -> void:
+func update_buttons_for_base_level(base_level_value: int, has_archery_range_value: bool, has_archery_range_upgrade_value: bool) -> void:
 	base_level = base_level_value
 	has_archery_range = has_archery_range_value
+	has_archery_range_upgrade = has_archery_range_upgrade_value
+	_update_buttons(base_level)
+
+func set_archery_range_upgrade(value: bool) -> void:
+	has_archery_range_upgrade = value
+	_update_buttons(base_level)
+
+func set_base_upgrade_in_progress(value: bool) -> void:
+	base_upgrade_in_progress = value
 	_update_buttons(base_level)
 
 func _update_all() -> void:
@@ -207,27 +249,45 @@ func _update_labels() -> void:
 		unit_label.text = "Units: %d / %d" % [current_units, max_units]
 
 func _update_buttons(base_level_value: int) -> void:
-	if spawn_unit_button != null:
-		spawn_unit_button.disabled = not can_spawn_unit()
-	if spawn_stone_thrower_button != null:
-		spawn_stone_thrower_button.disabled = base_level_value < 2 or not has_archery_range or not can_spawn_stone_thrower()
-	if tower_button != null:
-		tower_button.disabled = wood < tower_cost
-	if woodcutter_button != null:
-		woodcutter_button.disabled = wood < woodcutter_cost
-	if stonecutter_button != null:
-		stonecutter_button.disabled = wood < stonecutter_cost or base_level_value < 2
-	if archery_range_button != null:
-		archery_range_button.disabled = wood < archery_range_cost
-	if house_button != null:
-		house_button.disabled = wood < house_cost
-	if farm_button != null:
-		farm_button.disabled = wood < farm_cost
-	if wood_storage_button != null:
-		wood_storage_button.disabled = wood < wood_storage_cost
-	if food_storage_button != null:
-		food_storage_button.disabled = wood < food_storage_cost
-	if stone_storage_button != null:
-		stone_storage_button.disabled = wood < stone_storage_cost
+	_update_spawn_buttons(base_level_value)
+	_update_build_buttons(base_level_value)
 	if upgrade_button != null:
-		upgrade_button.disabled = wood < base_upgrade_cost or (base_level_value >= 2 and stone < base_upgrade_stone_cost)
+		upgrade_button.disabled = base_upgrade_in_progress or wood < base_upgrade_cost or (base_level_value >= 2 and stone < base_upgrade_stone_cost)
+
+func _update_spawn_buttons(base_level_value: int) -> void:
+	for unit_id in spawn_buttons.keys():
+		var button := spawn_buttons[unit_id] as Button
+		if button == null:
+			continue
+		var def: Dictionary = unit_defs.get(unit_id, {})
+		if def.is_empty():
+			button.disabled = true
+			button.visible = false
+			continue
+		var min_level: int = def.get("min_base_level", 1)
+		var requires_range: bool = def.get("requires_archery_range", false)
+		var requires_upgrade: bool = def.get("requires_archery_range_upgrade", false)
+		var unlocked := base_level_value >= min_level
+		if requires_range:
+			unlocked = unlocked and has_archery_range
+		if requires_upgrade:
+			unlocked = unlocked and has_archery_range_upgrade
+		var can_spawn := unlocked and can_spawn_unit_def(def)
+		button.disabled = not can_spawn
+		button.visible = unlocked
+
+func _update_build_buttons(base_level_value: int) -> void:
+	for building_id in build_buttons.keys():
+		var button := build_buttons[building_id] as Button
+		if button == null:
+			continue
+		var def: Dictionary = build_defs.get(building_id, {})
+		if def.is_empty():
+			button.disabled = true
+			button.visible = false
+			continue
+		var min_level: int = def.get("min_base_level", 1)
+		var unlocked := base_level_value >= min_level
+		var can_build := unlocked and can_afford_cost(def)
+		button.disabled = not can_build
+		button.visible = unlocked

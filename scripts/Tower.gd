@@ -14,6 +14,8 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if get_tree().paused:
+		return
 	_cooldown = maxf(0.0, _cooldown - delta)
 	if _cooldown > 0.0:
 		return
