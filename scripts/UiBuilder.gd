@@ -26,29 +26,53 @@ func build(main: Node) -> void:
 
 	var top_row: HBoxContainer = HBoxContainer.new()
 	top_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	top_row.add_theme_constant_override("separation", 24)
 	top_panel.add_child(top_row)
 
+	var top_left: HBoxContainer = HBoxContainer.new()
+	top_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_left.alignment = BoxContainer.ALIGNMENT_BEGIN
+	top_row.add_child(top_left)
+	main._speed_button = Button.new()
+	main._speed_button.text = "Speed x1"
+	main._speed_button.pressed.connect(main._on_speed_pressed)
+	top_left.add_child(main._speed_button)
+
+	var top_center: HBoxContainer = HBoxContainer.new()
+	top_center.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	top_center.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_center.add_theme_constant_override("separation", 24)
+	top_row.add_child(top_center)
+
+	var top_right: HBoxContainer = HBoxContainer.new()
+	top_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_right.alignment = BoxContainer.ALIGNMENT_END
+	top_row.add_child(top_right)
+
 	main._wood_label = Label.new()
 	main._wood_label.text = "Wood: 0 / 0"
-	top_row.add_child(main._wood_label)
+	top_center.add_child(main._wood_label)
 
 	main._food_label = Label.new()
 	main._food_label.text = "Food: 0 / 0"
-	top_row.add_child(main._food_label)
+	top_center.add_child(main._food_label)
 
 	main._stone_label = Label.new()
 	main._stone_label.text = "Stone: 0 / 0"
-	top_row.add_child(main._stone_label)
+	top_center.add_child(main._stone_label)
 
 	main._unit_label = Label.new()
 	main._unit_label.text = "Units: 0 / 0"
-	top_row.add_child(main._unit_label)
+	top_center.add_child(main._unit_label)
+	var menu_button: Button = Button.new()
+	menu_button.text = "Menu"
+	menu_button.pressed.connect(main._on_menu_pressed)
+	top_right.add_child(menu_button)
 
 	var panel: PanelContainer = PanelContainer.new()
 	panel.position = Vector2(16, 72)
-	panel.size = Vector2(320, 420)
+	panel.size = Vector2(240, 120)
 	main._hud_root.add_child(panel)
 
 	var vbox: VBoxContainer = VBoxContainer.new()
@@ -61,54 +85,6 @@ func build(main: Node) -> void:
 	main._base_label = Label.new()
 	main._base_label.text = main._base_label_text()
 	vbox.add_child(main._base_label)
-
-	var title: Label = Label.new()
-	title.text = "Path Generator"
-	vbox.add_child(title)
-
-	var straight_label: Label = Label.new()
-	straight_label.text = "Straightness"
-	vbox.add_child(straight_label)
-
-	main._slider_straightness = HSlider.new()
-	main._slider_straightness.min_value = 0.0
-	main._slider_straightness.max_value = 1.0
-	main._slider_straightness.step = 0.05
-	main._slider_straightness.value = main.path_straightness
-	main._slider_straightness.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main._slider_straightness.value_changed.connect(main._on_straightness_changed)
-	vbox.add_child(main._slider_straightness)
-
-	var vertical_label: Label = Label.new()
-	vertical_label.text = "Max Vertical Step"
-	vbox.add_child(vertical_label)
-
-	main._slider_vertical = HSlider.new()
-	main._slider_vertical.min_value = 1.0
-	main._slider_vertical.max_value = 12.0
-	main._slider_vertical.step = 1.0
-	main._slider_vertical.value = float(main.path_max_vertical_step)
-	main._slider_vertical.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main._slider_vertical.value_changed.connect(main._on_vertical_step_changed)
-	vbox.add_child(main._slider_vertical)
-
-	var length_label: Label = Label.new()
-	length_label.text = "Length Multiplier"
-	vbox.add_child(length_label)
-
-	main._slider_length = HSlider.new()
-	main._slider_length.min_value = 1.0
-	main._slider_length.max_value = 3.0
-	main._slider_length.step = 0.1
-	main._slider_length.value = main.path_length_multiplier
-	main._slider_length.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main._slider_length.value_changed.connect(main._on_length_changed)
-	vbox.add_child(main._slider_length)
-
-	main._reset_button = Button.new()
-	main._reset_button.text = "Reset (Regen Path)"
-	main._reset_button.pressed.connect(main._on_reset_pressed)
-	vbox.add_child(main._reset_button)
 
 	main._upgrade_button = null
 
@@ -266,7 +242,114 @@ func build(main: Node) -> void:
 	main._splash_play_button.pressed.connect(main._on_play_pressed)
 	splash_box.add_child(main._splash_play_button)
 
+	main._splash_map_label = Label.new()
+	main._splash_map_label.text = "Map"
+	splash_box.add_child(main._splash_map_label)
+
+	main._splash_map_select = OptionButton.new()
+	main._splash_map_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	splash_box.add_child(main._splash_map_select)
+
+	main._splash_create_button = Button.new()
+	main._splash_create_button.text = "Create Map"
+	main._splash_create_button.pressed.connect(main._on_create_map_pressed)
+	splash_box.add_child(main._splash_create_button)
+
 	main._splash_exit_button = Button.new()
 	main._splash_exit_button.text = "Exit"
 	main._splash_exit_button.pressed.connect(main._on_exit_pressed)
 	splash_box.add_child(main._splash_exit_button)
+
+	main._editor_panel = PanelContainer.new()
+	main._editor_panel.visible = false
+	main._editor_panel.size = Vector2(300, 320)
+	main._editor_panel.anchor_left = 0.0
+	main._editor_panel.anchor_top = 0.5
+	main._editor_panel.anchor_right = 0.0
+	main._editor_panel.anchor_bottom = 0.5
+	main._editor_panel.offset_left = 16
+	main._editor_panel.offset_top = -160
+	main._editor_panel.offset_right = 316
+	main._editor_panel.offset_bottom = 160
+	main._ui_layer.add_child(main._editor_panel)
+
+	var editor_box: VBoxContainer = VBoxContainer.new()
+	editor_box.add_theme_constant_override("separation", 8)
+	main._editor_panel.add_child(editor_box)
+
+	var editor_title: Label = Label.new()
+	editor_title.text = "Map Editor"
+	editor_box.add_child(editor_title)
+
+	main._editor_tool_label = Label.new()
+	main._editor_tool_label.text = "Tool: Path"
+	editor_box.add_child(main._editor_tool_label)
+
+	var tool_row: HBoxContainer = HBoxContainer.new()
+	tool_row.add_theme_constant_override("separation", 6)
+	editor_box.add_child(tool_row)
+
+	var path_button: Button = Button.new()
+	path_button.text = "Path"
+	path_button.pressed.connect(main._on_editor_tool_pressed.bind("path"))
+	tool_row.add_child(path_button)
+
+	var base_start_button: Button = Button.new()
+	base_start_button.text = "Player Base"
+	base_start_button.pressed.connect(main._on_editor_tool_pressed.bind("base_start"))
+	tool_row.add_child(base_start_button)
+
+	var base_end_button: Button = Button.new()
+	base_end_button.text = "Enemy Base"
+	base_end_button.pressed.connect(main._on_editor_tool_pressed.bind("base_end"))
+	tool_row.add_child(base_end_button)
+
+	var resource_row: HBoxContainer = HBoxContainer.new()
+	resource_row.add_theme_constant_override("separation", 6)
+	editor_box.add_child(resource_row)
+
+	var tree_button: Button = Button.new()
+	tree_button.text = "Tree"
+	tree_button.pressed.connect(main._on_editor_tool_pressed.bind("tree"))
+	resource_row.add_child(tree_button)
+
+	var stone_button: Button = Button.new()
+	stone_button.text = "Stone"
+	stone_button.pressed.connect(main._on_editor_tool_pressed.bind("stone"))
+	resource_row.add_child(stone_button)
+
+	var erase_button: Button = Button.new()
+	erase_button.text = "Erase"
+	erase_button.pressed.connect(main._on_editor_tool_pressed.bind("erase"))
+	resource_row.add_child(erase_button)
+
+	var name_label: Label = Label.new()
+	name_label.text = "Map Name"
+	editor_box.add_child(name_label)
+
+	main._editor_name_input = LineEdit.new()
+	main._editor_name_input.placeholder_text = "example_map"
+	editor_box.add_child(main._editor_name_input)
+
+	var save_row: HBoxContainer = HBoxContainer.new()
+	save_row.add_theme_constant_override("separation", 6)
+	editor_box.add_child(save_row)
+
+	var save_button: Button = Button.new()
+	save_button.text = "Save"
+	save_button.pressed.connect(main._on_editor_save_pressed)
+	save_row.add_child(save_button)
+
+	var load_button: Button = Button.new()
+	load_button.text = "Load"
+	load_button.pressed.connect(main._on_editor_load_pressed)
+	save_row.add_child(load_button)
+
+	main._editor_status_label = Label.new()
+	main._editor_status_label.text = ""
+	editor_box.add_child(main._editor_status_label)
+
+	var back_button: Button = Button.new()
+	back_button.text = "Back to Menu"
+	back_button.pressed.connect(main._on_editor_back_pressed)
+	editor_box.add_child(back_button)

@@ -18,6 +18,62 @@ func spawn_resources() -> void:
 	if not has_stone_in_band:
 		_find_any_stone_band_cell()
 
+func spawn_from_cells(tree_cells: Array[Vector2i], stone_cells: Array[Vector2i]) -> void:
+	_clear_trees()
+	_clear_stones()
+	for cell in tree_cells:
+		_place_tree(cell)
+	for cell in stone_cells:
+		_place_stone(cell)
+
+func clear_resources() -> void:
+	_clear_trees()
+	_clear_stones()
+
+func place_tree(top_left: Vector2i) -> bool:
+	return _place_tree(top_left)
+
+func place_stone(top_left: Vector2i) -> bool:
+	return _place_stone(top_left)
+
+func remove_tree_at(cell: Vector2i) -> bool:
+	if not main._tree_by_cell.has(cell):
+		return false
+	var tree: Node2D = main._tree_by_cell[cell] as Node2D
+	if tree == null or not is_instance_valid(tree):
+		return false
+	var top_left: Vector2i = tree.get("cell")
+	var cells: Array[Vector2i] = [
+		top_left,
+		top_left + Vector2i(1, 0),
+		top_left + Vector2i(0, 1),
+		top_left + Vector2i(1, 1),
+	]
+	for map_cell in cells:
+		main._tree_by_cell.erase(map_cell)
+	main._trees.erase(tree)
+	tree.queue_free()
+	return true
+
+func remove_stone_at(cell: Vector2i) -> bool:
+	if not main._stone_by_cell.has(cell):
+		return false
+	var stone: Node2D = main._stone_by_cell[cell] as Node2D
+	if stone == null or not is_instance_valid(stone):
+		return false
+	var top_left: Vector2i = stone.get("cell")
+	var cells: Array[Vector2i] = [
+		top_left,
+		top_left + Vector2i(1, 0),
+		top_left + Vector2i(0, 1),
+		top_left + Vector2i(1, 1),
+	]
+	for map_cell in cells:
+		main._stone_by_cell.erase(map_cell)
+	main._stones.erase(stone)
+	stone.queue_free()
+	return true
+
 func _clear_trees() -> void:
 	for tree in main._trees:
 		if tree != null and is_instance_valid(tree):

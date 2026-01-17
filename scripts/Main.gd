@@ -70,14 +70,18 @@ var _ui_builder: Node
 var _hud_root: Control
 var _splash_panel: PanelContainer
 var _splash_play_button: Button
+var _splash_create_button: Button
 var _splash_exit_button: Button
+var _splash_map_label: Label
+var _splash_map_select: OptionButton
 var _pause_panel: PanelContainer
 var _pause_resume_button: Button
 var _pause_exit_button: Button
-var _slider_straightness: HSlider
-var _slider_vertical: HSlider
-var _slider_length: HSlider
-var _reset_button: Button
+var _speed_button: Button
+var _editor_panel: PanelContainer
+var _editor_name_input: LineEdit
+var _editor_status_label: Label
+var _editor_tool_label: Label
 var _spawn_units_box: VBoxContainer
 var _spawn_buttons: Dictionary = {}
 var _unit_defs: Dictionary = {}
@@ -117,10 +121,20 @@ var _base_end_cell := Vector2i(-1, -1)
 var _base_upgrade_in_progress := false
 var _splash_active := true
 var _paused := false
+var _fast_forward := false
+var _editor_active := false
+var _editor_tool := "path"
+var _use_custom_map := false
+var _map_data: Dictionary = {}
+var _map_list: Array[String] = []
+var _editor_dragging := false
+var _editor_last_cell := Vector2i(-1, -1)
 
 func _ready() -> void:
 	_setup_camera()
 	_setup_ui_builder()
+	_update_editor_tool_label()
+	_refresh_map_list()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if _ui_layer != null:
 		_ui_layer.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -131,6 +145,7 @@ func _ready() -> void:
 	_setup_placement()
 	_setup_resource_spawner()
 	_update_base_label()
+	_update_speed_button_text()
 	if auto_generate_path and path_cells.is_empty():
 		_generate_random_path()
 	_rebuild_path()
@@ -147,6 +162,10 @@ func _process(_delta: float) -> void:
 		return
 	if _paused:
 		return
+	if _editor_active:
+		_update_camera_controls(_delta)
+		queue_redraw()
+		return
 	if _placement != null:
 		_placement.update_hover(get_global_mouse_position(), _build_mode)
 	_update_camera_controls(_delta)
@@ -157,15 +176,26 @@ func _process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _splash_active:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		_set_paused(not _paused)
-		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 		_camera_zoom = clampf(_camera_zoom * 1.1, 0.15, 2.5)
 		_camera.zoom = Vector2(_camera_zoom, _camera_zoom)
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 		_camera_zoom = clampf(_camera_zoom / 1.1, 0.15, 2.5)
 		_camera.zoom = Vector2(_camera_zoom, _camera_zoom)
+	if _editor_active:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_editor_dragging = true
+				_editor_last_cell = Vector2i(-1, -1)
+				_handle_editor_click(get_global_mouse_position())
+			else:
+				_editor_dragging = false
+		elif event is InputEventMouseMotion and _editor_dragging:
+			_handle_editor_drag(get_global_mouse_position())
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		_set_paused(not _paused)
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var world_pos := get_global_mouse_position()
 		if enable_path_edit and event.shift_pressed:
@@ -340,21 +370,6 @@ func set_path_cells(cells: Array[Vector2i]) -> void:
 	_rebuild_path()
 	queue_redraw()
 
-func _on_straightness_changed(value: float) -> void:
-	path_straightness = value
-	_reset_game()
-
-func _on_vertical_step_changed(value: float) -> void:
-	path_max_vertical_step = int(value)
-	_reset_game()
-
-func _on_length_changed(value: float) -> void:
-	path_length_multiplier = value
-	_reset_game()
-
-func _on_reset_pressed() -> void:
-	_reset_game()
-
 func _reset_game() -> void:
 	for node in get_tree().get_nodes_in_group("construction"):
 		node.queue_free()
@@ -370,6 +385,23 @@ func _reset_game() -> void:
 	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
 	_economy.set_base_upgrade_in_progress(false)
 	_enemy_timer.start()
+	queue_redraw()
+
+func _reset_for_play() -> void:
+	_clear_units()
+	_clear_constructions()
+	_clear_buildings()
+	_reset_bases()
+	_base_upgrade_in_progress = false
+	_game_over = false
+	if _game_over_panel != null:
+		_game_over_panel.visible = false
+	if _economy != null:
+		_economy.configure_resources(starting_wood, starting_food, starting_stone, base_resource_cap, unit_food_cost)
+		_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+		_economy.set_base_upgrade_in_progress(false)
+	if _enemy_timer != null:
+		_enemy_timer.start()
 	queue_redraw()
 
 func _cleanup_runtime_nodes() -> void:
@@ -447,6 +479,7 @@ func _set_splash_active(active: bool) -> void:
 		else:
 			_enemy_timer.start()
 	if active:
+		_set_fast_forward(false)
 		_set_paused(false)
 
 func _set_paused(active: bool) -> void:
@@ -688,7 +721,12 @@ func _is_path_cell(cell: Vector2i) -> bool:
 func _draw() -> void:
 	_draw_path()
 	_draw_player_zone()
+	if _editor_active:
+		_draw_editor_band()
+		_draw_editor_bases()
 	_draw_grid()
+	if _editor_active:
+		_draw_editor_hover()
 	if _placement != null:
 		_placement.draw_hover(self, _build_mode)
 
@@ -725,6 +763,30 @@ func _draw_path() -> void:
 	for cell in _ordered_path_cells:
 		var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
 		draw_rect(rect, ordered_color, true)
+
+func _draw_editor_band() -> void:
+	var band := _base_band_bounds()
+	var color := Color(0.2, 0.4, 0.8, 0.12)
+	for y in range(band.x, band.y + 1):
+		for x in range(grid_width):
+			var rect := Rect2(x * cell_size, y * cell_size, cell_size, cell_size)
+			draw_rect(rect, color, true)
+
+func _draw_editor_bases() -> void:
+	if _base_end_cell != Vector2i(-1, -1):
+		_draw_editor_base(_base_end_cell, Color(0.2, 0.6, 1.0, 0.5))
+	if _base_start_cell != Vector2i(-1, -1):
+		_draw_editor_base(_base_start_cell, Color(0.9, 0.2, 0.2, 0.5))
+
+func _draw_editor_base(center: Vector2i, color: Color) -> void:
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var cell := Vector2i(center.x + dx, center.y + dy)
+			if not _is_in_bounds(cell):
+				continue
+			var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
+			draw_rect(rect, color, true)
+			draw_rect(rect, color.darkened(0.4), false, 2.0)
 
 func _cell_to_world(cell: Vector2i) -> Vector2:
 	return Vector2(cell.x * cell_size + cell_size * 0.5, cell.y * cell_size + cell_size * 0.5)
@@ -873,6 +935,10 @@ func _update_camera_zoom() -> void:
 func _update_camera_controls(delta: float) -> void:
 	if _camera == null:
 		return
+	if _editor_active:
+		var focus := get_viewport().gui_get_focus_owner()
+		if focus is LineEdit:
+			return
 	var speed := 600.0
 	var input := Vector2.ZERO
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
@@ -932,12 +998,444 @@ func _on_restart_pressed() -> void:
 
 func _on_play_pressed() -> void:
 	_set_splash_active(false)
+	_set_editor_active(false)
+	var map_name := _get_selected_map_name()
+	if map_name != "":
+		var MapIOScript: Script = load("res://scripts/MapIO.gd")
+		var data: Dictionary = MapIOScript.call("load_map", map_name)
+		if not data.is_empty() and _apply_map_data(data):
+			_map_data = data
+			_use_custom_map = true
+			_reset_for_play()
+			return
+	if _use_custom_map and not _map_data.is_empty():
+		_apply_map_data(_map_data)
+		_reset_for_play()
+	else:
+		_reset_game()
 
 func _on_resume_pressed() -> void:
 	_set_paused(false)
 
+func _on_menu_pressed() -> void:
+	_set_paused(not _paused)
+
+func _on_speed_pressed() -> void:
+	_set_fast_forward(not _fast_forward)
+
+func _on_create_map_pressed() -> void:
+	_set_splash_active(false)
+	_set_editor_active(true)
+	_start_new_map()
+
+func _on_editor_tool_pressed(tool: String) -> void:
+	_set_editor_tool(tool)
+
+func _on_editor_save_pressed() -> void:
+	if _editor_name_input == null:
+		return
+	var name := _editor_name_input.text.strip_edges()
+	var data := _build_map_data()
+	if data.is_empty():
+		_set_editor_status("Map needs path + bases before saving.")
+		return
+	if not _has_tree_in_player_zone():
+		_set_editor_status("Add at least 1 tree in the rightmost %d columns." % player_zone_width)
+		return
+	if not _has_stone_in_player_band():
+		_set_editor_status("Add at least 1 stone in the rightmost %d columns." % min(player_zone_width + 3, grid_width))
+		return
+	var MapIOScript: Script = load("res://scripts/MapIO.gd")
+	var ok: bool = MapIOScript.call("save_map", name, data)
+	if ok:
+		_map_data = data
+		_use_custom_map = true
+		_refresh_map_list(name)
+		_set_editor_status("Saved: %s" % name)
+	else:
+		_set_editor_status("Save failed.")
+
+func _on_editor_load_pressed() -> void:
+	if _editor_name_input == null:
+		return
+	var name := _editor_name_input.text.strip_edges()
+	var MapIOScript: Script = load("res://scripts/MapIO.gd")
+	var data: Dictionary = MapIOScript.call("load_map", name)
+	if data.is_empty():
+		_set_editor_status("Load failed.")
+		return
+	if _apply_map_data(data):
+		_map_data = data
+		_use_custom_map = true
+		_refresh_map_list(name)
+		_set_editor_status("Loaded: %s" % name)
+	else:
+		_set_editor_status("Invalid map data.")
+
+func _on_editor_back_pressed() -> void:
+	_map_data = _build_map_data()
+	_use_custom_map = not _map_data.is_empty()
+	_set_editor_active(false)
+	_set_splash_active(true)
+
 func _on_exit_pressed() -> void:
 	get_tree().quit()
+
+func _set_editor_active(active: bool) -> void:
+	_editor_active = active
+	if _editor_panel != null:
+		_editor_panel.visible = active
+	if _hud_root != null:
+		_hud_root.visible = not active
+	if _game_over_panel != null:
+		_game_over_panel.visible = false
+	if _enemy_timer != null:
+		if active:
+			_enemy_timer.stop()
+		else:
+			_enemy_timer.start()
+	if active:
+		_set_paused(false)
+		_set_fast_forward(false)
+		_clear_units()
+		_clear_constructions()
+		_clear_buildings()
+		if _resource_spawner != null:
+			_resource_spawner.clear_resources()
+		_clear_bases()
+		queue_redraw()
+
+func _set_editor_tool(tool: String) -> void:
+	_editor_tool = tool
+	_update_editor_tool_label()
+
+func _update_editor_tool_label() -> void:
+	if _editor_tool_label != null:
+		var name := _editor_tool.capitalize()
+		if _editor_tool == "base_start":
+			name = "Player Base"
+		elif _editor_tool == "base_end":
+			name = "Enemy Base"
+		_editor_tool_label.text = "Tool: %s" % name
+
+func _set_editor_status(text: String) -> void:
+	if _editor_status_label != null:
+		_editor_status_label.text = text
+
+func _refresh_map_list(select_name: String = "") -> void:
+	var MapIOScript: Script = load("res://scripts/MapIO.gd")
+	var names: Array = MapIOScript.call("list_maps")
+	_map_list.clear()
+	if names != null:
+		for entry in names:
+			if entry is String:
+				_map_list.append(entry)
+	if _splash_map_select == null:
+		return
+	_splash_map_select.clear()
+	_splash_map_select.add_item("Random")
+	for name in _map_list:
+		_splash_map_select.add_item(name)
+	if select_name != "" and _map_list.has(select_name):
+		var index := _map_list.find(select_name)
+		_splash_map_select.select(index + 1)
+	else:
+		_splash_map_select.select(0)
+
+func _get_selected_map_name() -> String:
+	if _splash_map_select == null:
+		return ""
+	var idx := _splash_map_select.get_selected_id()
+	if idx <= 0:
+		return ""
+	var index := idx - 1
+	if index >= 0 and index < _map_list.size():
+		return _map_list[index]
+	return ""
+
+func _handle_editor_click(world_pos: Vector2) -> void:
+	var cell := Vector2i(int(world_pos.x / cell_size), int(world_pos.y / cell_size))
+	if not _is_in_bounds(cell):
+		return
+	if _editor_tool == "path":
+		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+			return
+		if not path_cells.has(cell):
+			path_cells.append(cell)
+		_rebuild_path()
+		queue_redraw()
+		return
+	if _editor_tool == "erase":
+		if _resource_spawner != null:
+			if _resource_spawner.remove_tree_at(cell) or _resource_spawner.remove_stone_at(cell):
+				queue_redraw()
+				return
+		if path_cells.has(cell):
+			path_cells.erase(cell)
+			_rebuild_path()
+			queue_redraw()
+			return
+		if _base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_base_start_cell, cell):
+			_base_start_cell = Vector2i(-1, -1)
+		if _base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_base_end_cell, cell):
+			_base_end_cell = Vector2i(-1, -1)
+		if _base_start_cell == Vector2i(-1, -1) or _base_end_cell == Vector2i(-1, -1):
+			_rebuild_path()
+			queue_redraw()
+		return
+	if _editor_tool == "base_start" or _editor_tool == "base_end":
+		if not _can_place_base(cell, _editor_tool):
+			return
+		if _editor_tool == "base_start":
+			_base_end_cell = cell
+		else:
+			_base_start_cell = cell
+		if not path_cells.has(cell):
+			path_cells.append(cell)
+		_rebuild_path()
+		queue_redraw()
+		return
+	if _editor_tool == "tree" or _editor_tool == "stone":
+		if _resource_spawner == null:
+			return
+		var placed := false
+		if _editor_tool == "tree":
+			placed = _resource_spawner.place_tree(cell)
+		else:
+			placed = _resource_spawner.place_stone(cell)
+		if placed:
+			queue_redraw()
+		return
+
+func _handle_editor_drag(world_pos: Vector2) -> void:
+	if _editor_tool != "path" and _editor_tool != "erase":
+		return
+	var cell := Vector2i(int(world_pos.x / cell_size), int(world_pos.y / cell_size))
+	if cell == _editor_last_cell:
+		return
+	_editor_last_cell = cell
+	_handle_editor_click(world_pos)
+
+func _can_place_base(center: Vector2i, kind: String) -> bool:
+	if kind == "base_start" and not _is_in_player_zone(center):
+		return false
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var cell := Vector2i(center.x + dx, center.y + dy)
+			if not _is_in_bounds(cell):
+				return false
+			if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+				return false
+			if path_cells.has(cell) and cell != center:
+				return false
+			if _base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_base_start_cell, cell):
+				return false
+			if _base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_base_end_cell, cell):
+				return false
+	return true
+
+func _is_in_enemy_zone(cell: Vector2i) -> bool:
+	return cell.x < min(player_zone_width, grid_width)
+
+func _is_in_base_area(center: Vector2i, cell: Vector2i) -> bool:
+	return abs(center.x - cell.x) <= 1 and abs(center.y - cell.y) <= 1
+
+func _draw_editor_hover() -> void:
+	if _editor_tool == "base_start" or _editor_tool == "base_end":
+		var cell := _mouse_cell()
+		if not _is_in_bounds(cell):
+			return
+		var valid := _can_place_base(cell, _editor_tool)
+		_draw_editor_square(cell, 3, valid)
+	elif _editor_tool == "path":
+		var cell := _mouse_cell()
+		if not _is_in_bounds(cell):
+			return
+		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+			return
+		_draw_editor_square(cell, 1, true)
+	elif _editor_tool == "tree" or _editor_tool == "stone":
+		var cell := _mouse_cell()
+		if not _is_in_bounds(cell):
+			return
+		var valid := true
+		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+			valid = false
+		if path_cells.has(cell) or _is_base_cell(cell):
+			valid = false
+		_draw_editor_square_top_left(cell, 2, valid)
+	elif _editor_tool == "erase":
+		var cell := _mouse_cell()
+		if not _is_in_bounds(cell):
+			return
+		var valid := _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or path_cells.has(cell) or _is_base_cell(cell)
+		_draw_editor_square(cell, 1, valid)
+
+func _mouse_cell() -> Vector2i:
+	var world_pos := get_global_mouse_position()
+	return Vector2i(int(world_pos.x / cell_size), int(world_pos.y / cell_size))
+
+func _draw_editor_square(center: Vector2i, size_cells: int, valid: bool) -> void:
+	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
+	var half := int(floor(size_cells / 2.0))
+	for dx in range(-half, -half + size_cells):
+		for dy in range(-half, -half + size_cells):
+			var cell := Vector2i(center.x + dx, center.y + dy)
+			if not _is_in_bounds(cell):
+				continue
+			var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
+			draw_rect(rect, color, true)
+			draw_rect(rect, color.darkened(0.4), false, 2.0)
+
+func _draw_editor_square_top_left(top_left: Vector2i, size_cells: int, valid: bool) -> void:
+	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
+	for dx in range(size_cells):
+		for dy in range(size_cells):
+			var cell := Vector2i(top_left.x + dx, top_left.y + dy)
+			if not _is_in_bounds(cell):
+				continue
+			var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
+			draw_rect(rect, color, true)
+			draw_rect(rect, color.darkened(0.4), false, 2.0)
+
+func _build_map_data() -> Dictionary:
+	if _base_start_cell == Vector2i(-1, -1) or _base_end_cell == Vector2i(-1, -1):
+		return {}
+	if path_cells.is_empty():
+		return {}
+	var data := {
+		"grid_width": grid_width,
+		"grid_height": grid_height,
+		"path": _serialize_cells(path_cells),
+		"base_start": [ _base_start_cell.x, _base_start_cell.y ],
+		"base_end": [ _base_end_cell.x, _base_end_cell.y ],
+		"trees": _serialize_cells(_collect_resource_cells(_trees)),
+		"stones": _serialize_cells(_collect_resource_cells(_stones)),
+	}
+	return data
+
+func _apply_map_data(data: Dictionary) -> bool:
+	if data.is_empty():
+		return false
+	grid_width = int(data.get("grid_width", grid_width))
+	grid_height = int(data.get("grid_height", grid_height))
+	path_cells = _parse_cells(data.get("path", []))
+	_base_start_cell = _parse_vec2i(data.get("base_start", []))
+	_base_end_cell = _parse_vec2i(data.get("base_end", []))
+	_clear_bases()
+	_ordered_path_cells.clear()
+	_path_valid = false
+	_rebuild_path()
+	if _resource_spawner != null:
+		var tree_cells := _parse_cells(data.get("trees", []))
+		var stone_cells := _parse_cells(data.get("stones", []))
+		_resource_spawner.spawn_from_cells(tree_cells, stone_cells)
+	queue_redraw()
+	return true
+
+func _collect_resource_cells(nodes: Array[Node2D]) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var seen: Dictionary = {}
+	for node in nodes:
+		if node == null or not is_instance_valid(node):
+			continue
+		if not node.has_method("get"):
+			continue
+		var cell_value = node.get("cell")
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			continue
+		var cell: Vector2i = cell_value
+		if seen.has(cell):
+			continue
+		seen[cell] = true
+		cells.append(cell)
+	return cells
+
+func _has_tree_in_player_zone() -> bool:
+	for tree in _trees:
+		if tree == null or not is_instance_valid(tree):
+			continue
+		var cell_value = tree.get("cell")
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			continue
+		var cell: Vector2i = cell_value
+		if _is_in_player_zone(cell):
+			return true
+	return false
+
+func _has_stone_in_player_band() -> bool:
+	var min_x: int = max(grid_width - 10, 0)
+	for stone in _stones:
+		if stone == null or not is_instance_valid(stone):
+			continue
+		var cell_value = stone.get("cell")
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			continue
+		var cell: Vector2i = cell_value
+		if cell.x >= min_x:
+			return true
+	return false
+
+func _serialize_cells(cells: Array[Vector2i]) -> Array:
+	var out: Array = []
+	for cell in cells:
+		out.append([cell.x, cell.y])
+	return out
+
+func _parse_cells(raw: Array) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for entry in raw:
+		if entry is Array and entry.size() >= 2:
+			var x: int = int(entry[0])
+			var y: int = int(entry[1])
+			cells.append(Vector2i(x, y))
+	return cells
+
+func _parse_vec2i(raw) -> Vector2i:
+	if raw is Array and raw.size() >= 2:
+		return Vector2i(int(raw[0]), int(raw[1]))
+	return Vector2i(-1, -1)
+
+func _start_new_map() -> void:
+	path_cells.clear()
+	_ordered_path_cells.clear()
+	_path_valid = false
+	_base_start_cell = Vector2i(-1, -1)
+	_base_end_cell = Vector2i(-1, -1)
+	if _resource_spawner != null:
+		_resource_spawner.clear_resources()
+	_clear_bases()
+	queue_redraw()
+
+func _clear_constructions() -> void:
+	for node in get_tree().get_nodes_in_group("construction"):
+		node.queue_free()
+
+func _clear_buildings() -> void:
+	var unique: Dictionary = {}
+	for building in _building_by_cell.values():
+		if building == null or not is_instance_valid(building):
+			continue
+		if unique.has(building):
+			continue
+		unique[building] = true
+		building.queue_free()
+	_building_by_cell.clear()
+	_occupied.clear()
+	_archery_ranges.clear()
+	_has_archery_range = false
+	_has_archery_range_upgrade = false
+	if _economy != null:
+		_economy.set_archery_range_upgrade(false)
+
+func _set_fast_forward(active: bool) -> void:
+	_fast_forward = active
+	Engine.time_scale = 2.0 if active else 1.0
+	_update_speed_button_text()
+
+func _update_speed_button_text() -> void:
+	if _speed_button != null:
+		_speed_button.text = "Speed x2" if _fast_forward else "Speed x1"
 
 func _get_path_points() -> Array[Vector2]:
 	var points: Array[Vector2] = []
@@ -1047,11 +1545,19 @@ func _rebuild_path() -> void:
 	if goal == Vector2i(-1, -1):
 		_clear_bases()
 		return
+	if not came_from.has(goal):
+		_path_valid = false
+		_clear_bases()
+		return
 
 	var path_rev: Array[Vector2i] = []
 	var step: Vector2i = goal
 	while step != Vector2i(-999, -999):
 		path_rev.append(step)
+		if not came_from.has(step):
+			_path_valid = false
+			_clear_bases()
+			return
 		step = came_from[step]
 
 	path_rev.reverse()
