@@ -41,10 +41,9 @@ func set_active(is_active: bool) -> void:
 	active = is_active
 	if _editor_panel != null:
 		_editor_panel.visible = active
-	if _main._hud_root != null:
-		_main._hud_root.visible = not active
-	if _main._game_over_panel != null:
-		_main._game_over_panel.visible = false
+	if _main._ui_controller != null:
+		_main._ui_controller.set_hud_visible(not active)
+		_main._ui_controller.set_game_over_visible(false)
 	if _main._enemy_timer != null:
 		if active:
 			_main._enemy_timer.stop()
@@ -93,22 +92,28 @@ func refresh_map_list(select_name: String = "") -> void:
 		for entry in names:
 			if entry is String:
 				map_list.append(entry)
-	if _main._splash_map_select == null:
+	var map_select: OptionButton = null
+	if _main._ui_controller != null:
+		map_select = _main._ui_controller.splash_map_select
+	if map_select == null:
 		return
-	_main._splash_map_select.clear()
-	_main._splash_map_select.add_item("Random")
+	map_select.clear()
+	map_select.add_item("Random")
 	for name in map_list:
-		_main._splash_map_select.add_item(name)
+		map_select.add_item(name)
 	if select_name != "" and map_list.has(select_name):
 		var index := map_list.find(select_name)
-		_main._splash_map_select.select(index + 1)
+		map_select.select(index + 1)
 	else:
-		_main._splash_map_select.select(0)
+		map_select.select(0)
 
 func get_selected_map_name() -> String:
-	if _main._splash_map_select == null:
+	var map_select: OptionButton = null
+	if _main._ui_controller != null:
+		map_select = _main._ui_controller.splash_map_select
+	if map_select == null:
 		return ""
-	var idx: int = _main._splash_map_select.get_selected_id()
+	var idx: int = map_select.get_selected_id()
 	if idx <= 0:
 		return ""
 	var index: int = idx - 1

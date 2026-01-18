@@ -74,21 +74,9 @@ func build(main: Node) -> void:
 	menu_button.pressed.connect(main._on_menu_pressed)
 	top_right.add_child(menu_button)
 
-	var panel: PanelContainer = PanelContainer.new()
-	panel.position = Vector2(16, 72)
-	panel.size = Vector2(240, 120)
-	main._hud_root.add_child(panel)
-
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	panel.add_child(vbox)
-
 	main._build_label = Label.new()
 	main._build_label.text = "Build: "
-
-	main._base_label = Label.new()
-	main._base_label.text = main._base_label_text()
-	vbox.add_child(main._base_label)
+	main._base_label = null
 
 	main._upgrade_button = null
 

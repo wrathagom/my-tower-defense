@@ -1,6 +1,8 @@
 extends Node2D
 
 const GameConfig = preload("res://scripts/GameConfig.gd")
+const UiController = preload("res://scripts/UiController.gd")
+const PerformanceTracker = preload("res://scripts/PerformanceTracker.gd")
 
 @export var config: GameConfig = GameConfig.new()
 
@@ -15,6 +17,7 @@ var _base_start: Base
 var _base_end: Base
 var _ui_layer: CanvasLayer
 var _ui_builder: Node
+var _ui_controller: UiController
 var _hud_root: Control
 var _splash_panel: PanelContainer
 var _splash_play_button: Button
@@ -81,7 +84,7 @@ var _build_mode := "grunt_tower"
 var _base_start_cell := Vector2i(-1, -1)
 var _base_end_cell := Vector2i(-1, -1)
 var _editor_active := false
-var _performance_tracker: Node
+var _performance_tracker: PerformanceTracker
 var _level_complete_ui: Node
 var _level_select_ui: Node
 var _level_launch_ui: Node
@@ -111,7 +114,14 @@ func _ready() -> void:
 	_setup_upgrade_manager()
 	_setup_ui_builder()
 	_setup_performance_tracker()
-	_economy.set_labels(_wood_label, _food_label, _stone_label, _iron_label, _unit_label)
+	if _ui_controller != null:
+		_economy.set_labels(
+			_ui_controller.wood_label,
+			_ui_controller.food_label,
+			_ui_controller.stone_label,
+			_ui_controller.iron_label,
+			_ui_controller.unit_label
+		)
 	_upgrade_manager._sync_ui_refs()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if _ui_layer != null:
@@ -197,7 +207,10 @@ func _setup_ui_builder() -> void:
 	var UiBuilderScript: Script = load("res://scripts/UiBuilder.gd")
 	_ui_builder = UiBuilderScript.new()
 	add_child(_ui_builder)
+	_ui_controller = UiController.new()
+	add_child(_ui_controller)
 	_ui_builder.build(self)
+	_ui_controller.capture_from_main(self)
 
 func _setup_economy() -> void:
 	var EconomyScript: Script = load("res://scripts/Economy.gd")
@@ -313,9 +326,12 @@ func _setup_resource_catalog() -> void:
 		}
 
 func _build_build_buttons() -> void:
-	if _build_buttons_box == null:
+	var build_buttons_box: HBoxContainer = null
+	if _ui_controller != null:
+		build_buttons_box = _ui_controller.build_buttons_box
+	if build_buttons_box == null:
 		return
-	for child in _build_buttons_box.get_children():
+	for child in build_buttons_box.get_children():
 		child.queue_free()
 	_build_buttons.clear()
 	var order: Array[String] = _building_catalog.get_order()
@@ -331,13 +347,16 @@ func _build_build_buttons() -> void:
 		var cost_label: String = _building_cost_label(def)
 		button.text = label if cost_label == "" else "%s (%s)" % [label, cost_label]
 		button.pressed.connect(Callable(self, "_set_build_mode").bind(building_id))
-		_build_buttons_box.add_child(button)
+		build_buttons_box.add_child(button)
 		_build_buttons[building_id] = button
 
 func _build_build_categories() -> void:
-	if _build_category_box == null or _building_catalog == null:
+	var build_category_box: HBoxContainer = null
+	if _ui_controller != null:
+		build_category_box = _ui_controller.build_category_box
+	if build_category_box == null or _building_catalog == null:
 		return
-	for child in _build_category_box.get_children():
+	for child in build_category_box.get_children():
 		child.queue_free()
 	_build_category_buttons.clear()
 	var categories: Array[String] = _building_catalog.get_categories()
@@ -345,7 +364,7 @@ func _build_build_categories() -> void:
 		var button := Button.new()
 		button.text = category
 		button.pressed.connect(Callable(self, "_set_build_category").bind(category))
-		_build_category_box.add_child(button)
+		build_category_box.add_child(button)
 		_build_category_buttons[category] = button
 
 func _set_build_category(category: String) -> void:
@@ -391,9 +410,12 @@ func _building_cost_label(def: Dictionary) -> String:
 	return "+".join(parts)
 
 func _build_spawn_buttons() -> void:
-	if _spawn_units_box == null:
+	var spawn_units_box: VBoxContainer = null
+	if _ui_controller != null:
+		spawn_units_box = _ui_controller.spawn_units_box
+	if spawn_units_box == null:
 		return
-	for child in _spawn_units_box.get_children():
+	for child in spawn_units_box.get_children():
 		child.queue_free()
 	_spawn_buttons.clear()
 	var order: Array[String] = _unit_catalog.get_order()
@@ -406,7 +428,7 @@ func _build_spawn_buttons() -> void:
 		var cost_label: String = _unit_cost_label(def)
 		button.text = label if cost_label == "" else "%s (%s)" % [label, cost_label]
 		button.pressed.connect(Callable(self, "_spawn_unit_by_id").bind(unit_id))
-		_spawn_units_box.add_child(button)
+		spawn_units_box.add_child(button)
 		_spawn_buttons[unit_id] = button
 
 func _unit_cost_label(def: Dictionary) -> String:
@@ -576,13 +598,13 @@ func _update_upgrade_button_text() -> void:
 
 func _set_build_mode(mode: String) -> void:
 	_build_mode = mode
-	if _build_label != null:
+	if _ui_controller != null:
 		if _building_defs.has(mode):
 			var def: Dictionary = _building_defs[mode]
 			var label: String = str(def.get("label", mode))
-			_build_label.text = "Build: %s" % label
+			_ui_controller.set_build_label_text("Build: %s" % label)
 		else:
-			_build_label.text = "Build: "
+			_ui_controller.set_build_label_text("Build: ")
 	for key in _build_buttons.keys():
 		var button := _build_buttons[key] as Button
 		if button == null:
@@ -710,96 +732,11 @@ func _update_base_upgrade_indicator() -> void:
 	_upgrade_manager.update_base_upgrade_indicator()
 
 func _update_stats_panel() -> void:
-	if _stats_panel == null:
-		return
-
-	# Update base level
-	if _stats_base_level_label != null and _upgrade_manager != null:
-		_stats_base_level_label.text = "Base Level: %d" % _upgrade_manager.base_level
-
-	# Update timer
-	if _stats_timer_label != null and _performance_tracker != null:
-		var elapsed: float = _performance_tracker.get_elapsed_time()
-		var minutes: int = int(elapsed) / 60
-		var seconds: int = int(elapsed) % 60
-		_stats_timer_label.text = "Time: %d:%02d" % [minutes, seconds]
-
-	# Update units stats
-	if _stats_units_label != null and _performance_tracker != null:
-		var alive: int = _performance_tracker.get_units_alive()
-		var spawned: int = _performance_tracker.get_units_spawned()
-		var lost: int = _performance_tracker.get_units_lost()
-		_stats_units_label.text = "Units: %d alive / %d spawned (%d lost)" % [alive, spawned, lost]
-
-	# Update enemies killed
-	if _stats_enemies_label != null and _performance_tracker != null:
-		_stats_enemies_label.text = "Enemies Killed: %d" % _performance_tracker.get_enemies_killed()
-
-	# Update star progress (campaign mode only)
-	if _stats_stars_box != null:
-		_update_star_progress()
-
-func _update_star_progress() -> void:
-	if _stats_stars_box == null:
-		return
-
-	# Clear existing labels
-	for child in _stats_stars_box.get_children():
-		child.queue_free()
-
-	# Only show in campaign mode
-	if not CampaignManager.is_campaign_mode or CampaignManager.current_level_id == "":
-		var hidden_label := Label.new()
-		hidden_label.text = "(Campaign mode only)"
-		hidden_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-		_stats_stars_box.add_child(hidden_label)
-		return
-
-	var thresholds := CampaignManager.get_star_thresholds(CampaignManager.current_level_id, CampaignManager.current_difficulty)
-	if thresholds.is_empty():
-		return
-
-	# Time threshold
-	var time_threshold: float = thresholds.get("time", 999999.0)
-	var current_time: float = _performance_tracker.get_elapsed_time() if _performance_tracker != null else 0.0
-	var time_ok := current_time <= time_threshold
-	var time_label := Label.new()
-	time_label.text = "%s Time: < %dm (%d:%02d)" % [
-		"✓" if time_ok else "✗",
-		int(time_threshold) / 60,
-		int(current_time) / 60,
-		int(current_time) % 60
-	]
-	time_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3) if time_ok else Color(0.9, 0.3, 0.3))
-	_stats_stars_box.add_child(time_label)
-
-	# Base HP threshold
-	var hp_percent_threshold: float = thresholds.get("base_hp_percent", 0.0)
-	var current_hp_percent: float = 0.0
-	if _base_end != null and _base_end.max_hp > 0:
-		current_hp_percent = (float(_base_end.hp) / float(_base_end.max_hp)) * 100.0
-	var hp_ok := current_hp_percent >= hp_percent_threshold
-	var hp_label := Label.new()
-	hp_label.text = "%s Base HP: > %d%% (%d%%)" % [
-		"✓" if hp_ok else "✗",
-		int(hp_percent_threshold),
-		int(current_hp_percent)
-	]
-	hp_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3) if hp_ok else Color(0.9, 0.3, 0.3))
-	_stats_stars_box.add_child(hp_label)
-
-	# Units lost threshold
-	var units_lost_threshold: int = thresholds.get("units_lost", 999999)
-	var current_units_lost: int = _performance_tracker.get_units_lost() if _performance_tracker != null else 0
-	var units_ok := current_units_lost <= units_lost_threshold
-	var units_label := Label.new()
-	units_label.text = "%s Units Lost: < %d (%d)" % [
-		"✓" if units_ok else "✗",
-		units_lost_threshold,
-		current_units_lost
-	]
-	units_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3) if units_ok else Color(0.9, 0.3, 0.3))
-	_stats_stars_box.add_child(units_label)
+	var base_level: int = 0
+	if _upgrade_manager != null:
+		base_level = _upgrade_manager.base_level
+	if _ui_controller != null:
+		_ui_controller.update_stats(_performance_tracker, base_level, _base_end)
 
 func _register_archery_range(range: Node2D) -> void:
 	_upgrade_manager.register_archery_range(range)
@@ -916,8 +853,8 @@ func _handle_level_end(is_player_base: bool) -> void:
 		return
 
 	# In campaign mode, always hide the fallback game over panel
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
+	if _ui_controller != null:
+		_ui_controller.set_game_over_visible(false)
 
 	var victory: bool = not is_player_base
 	var base_hp: int = 0
@@ -969,7 +906,8 @@ func _on_sandbox_pressed() -> void:
 		_reset_game()
 
 func _on_campaign_pressed() -> void:
-	_splash_panel.visible = false
+	if _ui_controller != null:
+		_ui_controller.set_splash_visible(false)
 	if _level_select_ui != null:
 		_level_select_ui.visible = true
 		if _level_select_ui.has_method("show_ui"):
@@ -1014,11 +952,12 @@ func _on_level_selected(level_id: String, difficulty: String) -> void:
 func _on_level_select_back() -> void:
 	if _level_select_ui != null:
 		_level_select_ui.visible = false
-	_splash_panel.visible = true
+	if _ui_controller != null:
+		_ui_controller.set_splash_visible(true)
 
 func _on_level_retry() -> void:
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
+	if _ui_controller != null:
+		_ui_controller.set_game_over_visible(false)
 	_reset_for_play()
 
 func _on_next_level() -> void:
@@ -1027,15 +966,15 @@ func _on_next_level() -> void:
 		_on_level_selected(next_level, "easy")
 
 func _on_level_select_from_complete() -> void:
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
+	if _ui_controller != null:
+		_ui_controller.set_game_over_visible(false)
 	_game_state_manager.set_splash_active(true)
 	_on_campaign_pressed()
 
 func _on_main_menu_from_complete() -> void:
 	CampaignManager.exit_campaign()
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
+	if _ui_controller != null:
+		_ui_controller.set_game_over_visible(false)
 	_game_state_manager.set_splash_active(true)
 
 func _on_resume_pressed() -> void:

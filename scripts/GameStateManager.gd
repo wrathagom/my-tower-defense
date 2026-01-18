@@ -4,18 +4,15 @@ extends Node
 signal state_changed(new_state: String)
 signal game_over_triggered(is_player_base: bool)
 
+const UiController = preload("res://scripts/UiController.gd")
+
 var _main: Node
 var _game_over := false
 var _splash_active := true
 var _paused := false
 var _fast_forward := false
 
-var _hud_root: Control
-var _splash_panel: PanelContainer
-var _pause_panel: PanelContainer
-var _game_over_panel: PanelContainer
-var _game_over_label: Label
-var _speed_button: Button
+var _ui: UiController
 var _enemy_timer: Timer
 
 func setup(main_node: Node) -> void:
@@ -25,12 +22,7 @@ func setup(main_node: Node) -> void:
 func _sync_ui_refs() -> void:
 	if _main == null:
 		return
-	_hud_root = _main._hud_root
-	_splash_panel = _main._splash_panel
-	_pause_panel = _main._pause_panel
-	_game_over_panel = _main._game_over_panel
-	_game_over_label = _main._game_over_label
-	_speed_button = _main._speed_button
+	_ui = _main._ui_controller
 	_enemy_timer = _main._enemy_timer
 
 func is_game_over() -> bool:
@@ -47,12 +39,10 @@ func is_fast_forward() -> bool:
 
 func set_splash_active(active: bool) -> void:
 	_splash_active = active
-	if _hud_root != null:
-		_hud_root.visible = not active
-	if _splash_panel != null:
-		_splash_panel.visible = active
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
+	if _ui != null:
+		_ui.set_hud_visible(not active)
+		_ui.set_splash_visible(active)
+		_ui.set_game_over_visible(false)
 	if _enemy_timer != null:
 		if active:
 			_enemy_timer.stop()
@@ -69,8 +59,8 @@ func set_paused(active: bool) -> void:
 	if _game_over:
 		return
 	_paused = active
-	if _pause_panel != null:
-		_pause_panel.visible = active
+	if _ui != null:
+		_ui.set_pause_visible(active)
 	if _main != null:
 		_main.get_tree().paused = active
 	if _enemy_timer != null:
@@ -88,8 +78,8 @@ func set_fast_forward(active: bool) -> void:
 	_update_speed_button_text()
 
 func _update_speed_button_text() -> void:
-	if _speed_button != null:
-		_speed_button.text = "Speed x2" if _fast_forward else "Speed x1"
+	if _ui != null:
+		_ui.set_speed_button_text(_fast_forward)
 
 func on_game_over(is_player_base: bool) -> void:
 	if _game_over:
@@ -105,10 +95,9 @@ func on_game_over(is_player_base: bool) -> void:
 			var node := button as Button
 			if node != null:
 				node.disabled = true
-	if _game_over_panel != null:
-		_game_over_panel.visible = true
-	if _game_over_label != null:
-		_game_over_label.text = "You Lose" if is_player_base else "You Win"
+	if _ui != null:
+		_ui.set_game_over_visible(true)
+		_ui.set_game_over_text("You Lose" if is_player_base else "You Win")
 	game_over_triggered.emit(is_player_base)
 	state_changed.emit("game_over")
 
@@ -117,5 +106,5 @@ func reset() -> void:
 	_splash_active = false
 	_paused = false
 	set_fast_forward(false)
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
+	if _ui != null:
+		_ui.set_game_over_visible(false)

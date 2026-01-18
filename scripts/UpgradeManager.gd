@@ -3,6 +3,8 @@ extends Node
 
 signal base_upgraded(new_level: int)
 
+const UiController = preload("res://scripts/UiController.gd")
+
 var _main: Node
 var _economy: Node
 
@@ -30,13 +32,16 @@ func setup(main_node: Node, economy_node: Node) -> void:
 func _sync_ui_refs() -> void:
 	if _main == null:
 		return
-	_upgrade_modal = _main._upgrade_modal
-	_upgrade_modal_title = _main._upgrade_modal_title
-	_upgrade_modal_level = _main._upgrade_modal_level
-	_upgrade_modal_cost = _main._upgrade_modal_cost
-	_upgrade_modal_unlocks = _main._upgrade_modal_unlocks
-	_upgrade_modal_button = _main._upgrade_modal_button
-	_upgrade_modal_close = _main._upgrade_modal_close
+	var ui: UiController = _main._ui_controller
+	if ui == null:
+		return
+	_upgrade_modal = ui.upgrade_modal
+	_upgrade_modal_title = ui.upgrade_modal_title
+	_upgrade_modal_level = ui.upgrade_modal_level
+	_upgrade_modal_cost = ui.upgrade_modal_cost
+	_upgrade_modal_unlocks = ui.upgrade_modal_unlocks
+	_upgrade_modal_button = ui.upgrade_modal_button
+	_upgrade_modal_close = ui.upgrade_modal_close
 
 func show_upgrade_modal(kind: String, target: Node2D) -> void:
 	if _upgrade_modal == null:
