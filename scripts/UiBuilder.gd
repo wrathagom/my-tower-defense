@@ -279,15 +279,15 @@ func build(main: Node) -> void:
 	pause_box.add_child(main._pause_exit_button)
 
 	main._splash_panel = PanelContainer.new()
-	main._splash_panel.size = Vector2(360, 200)
+	main._splash_panel.size = Vector2(360, 280)
 	main._splash_panel.anchor_left = 0.5
 	main._splash_panel.anchor_top = 0.5
 	main._splash_panel.anchor_right = 0.5
 	main._splash_panel.anchor_bottom = 0.5
 	main._splash_panel.offset_left = -180
-	main._splash_panel.offset_top = -100
+	main._splash_panel.offset_top = -140
 	main._splash_panel.offset_right = 180
-	main._splash_panel.offset_bottom = 100
+	main._splash_panel.offset_bottom = 140
 	main._ui_layer.add_child(main._splash_panel)
 
 	var splash_box: VBoxContainer = VBoxContainer.new()
@@ -302,10 +302,22 @@ func build(main: Node) -> void:
 	splash_title.text = "Tower Defense"
 	splash_box.add_child(splash_title)
 
-	main._splash_play_button = Button.new()
-	main._splash_play_button.text = "Play"
-	main._splash_play_button.pressed.connect(main._on_play_pressed)
-	splash_box.add_child(main._splash_play_button)
+	# Campaign button
+	main._splash_campaign_button = Button.new()
+	main._splash_campaign_button.text = "Campaign"
+	main._splash_campaign_button.pressed.connect(main._on_campaign_pressed)
+	splash_box.add_child(main._splash_campaign_button)
+
+	# Sandbox section
+	var sandbox_label: Label = Label.new()
+	sandbox_label.text = "Sandbox Mode"
+	sandbox_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	splash_box.add_child(sandbox_label)
+
+	main._splash_sandbox_button = Button.new()
+	main._splash_sandbox_button.text = "Play Sandbox"
+	main._splash_sandbox_button.pressed.connect(main._on_sandbox_pressed)
+	splash_box.add_child(main._splash_sandbox_button)
 
 	main._splash_map_label = Label.new()
 	main._splash_map_label.text = "Map"
@@ -324,6 +336,9 @@ func build(main: Node) -> void:
 	main._splash_exit_button.text = "Exit"
 	main._splash_exit_button.pressed.connect(main._on_exit_pressed)
 	splash_box.add_child(main._splash_exit_button)
+
+	# Keep play button reference for compatibility
+	main._splash_play_button = main._splash_sandbox_button
 
 	main._editor_panel = PanelContainer.new()
 	main._editor_panel.visible = false
@@ -426,3 +441,21 @@ func build(main: Node) -> void:
 	back_button.text = "Back to Menu"
 	back_button.pressed.connect(main._on_editor_back_pressed)
 	editor_box.add_child(back_button)
+
+	# Level Select UI
+	var LevelSelectScript: Script = load("res://scripts/ui/LevelSelectUI.gd")
+	main._level_select_ui = LevelSelectScript.new()
+	main._level_select_ui.visible = false
+	main._level_select_ui.level_selected.connect(main._on_level_selected)
+	main._level_select_ui.back_pressed.connect(main._on_level_select_back)
+	main._ui_layer.add_child(main._level_select_ui)
+
+	# Level Complete UI
+	var LevelCompleteScript: Script = load("res://scripts/ui/LevelCompleteUI.gd")
+	main._level_complete_ui = LevelCompleteScript.new()
+	main._level_complete_ui.visible = false
+	main._level_complete_ui.retry_pressed.connect(main._on_level_retry)
+	main._level_complete_ui.next_level_pressed.connect(main._on_next_level)
+	main._level_complete_ui.level_select_pressed.connect(main._on_level_select_from_complete)
+	main._level_complete_ui.main_menu_pressed.connect(main._on_main_menu_from_complete)
+	main._ui_layer.add_child(main._level_complete_ui)

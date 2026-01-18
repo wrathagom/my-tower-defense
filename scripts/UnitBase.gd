@@ -13,6 +13,10 @@ class_name UnitBase
 @export var projectile_scene: String = ""
 @export var projectile_speed: float = 220.0
 
+# Campaign multipliers (applied in _ready)
+var hp_multiplier: float = 1.0
+var damage_multiplier: float = 1.0
+
 var path_points: Array[Vector2] = []
 var _path_index := 0
 var _hp := 0
@@ -24,6 +28,9 @@ signal reached_goal
 signal died
 
 func _ready() -> void:
+	# Apply multipliers
+	max_hp = int(ceil(float(max_hp) * hp_multiplier))
+	attack_damage = int(ceil(float(attack_damage) * damage_multiplier))
 	_hp = max_hp
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.randomize()

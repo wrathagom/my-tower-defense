@@ -1,0 +1,54 @@
+{
+	"id": "level_04",
+	"name": "Iron Valley",
+	"campaign_order": 4,
+	"max_base_level": 3,
+	"available_units": ["grunt", "stone_thrower", "archer"],
+	"available_buildings": ["grunt_tower", "archer_tower", "woodcutter", "stonecutter", "iron_miner", "house", "farm", "wood_storage", "food_storage", "stone_storage", "iron_storage", "archery_range"],
+	"difficulty_configs": {
+		"easy": {
+			"spawn_interval": 1.9,
+			"enemy_hp_multiplier": 1.0,
+			"enemy_damage_multiplier": 0.9,
+			"starting_resources": {"wood": 35, "food": 5, "stone": 15, "iron": 5},
+			"star_thresholds": {
+				"time": 450,
+				"base_hp_percent": 55,
+				"units_lost": 22
+			}
+		},
+		"medium": {
+			"spawn_interval": 1.4,
+			"enemy_hp_multiplier": 1.2,
+			"enemy_damage_multiplier": 1.1,
+			"starting_resources": {"wood": 28, "food": 3, "stone": 10, "iron": 0},
+			"star_thresholds": {
+				"time": 380,
+				"base_hp_percent": 65,
+				"units_lost": 15
+			}
+		},
+		"hard": {
+			"spawn_interval": 0.9,
+			"enemy_hp_multiplier": 1.6,
+			"enemy_damage_multiplier": 1.4,
+			"starting_resources": {"wood": 22, "food": 0, "stone": 5, "iron": 0},
+			"star_thresholds": {
+				"time": 320,
+				"base_hp_percent": 75,
+				"units_lost": 9
+			}
+		}
+	},
+	"challenge_modes": [],
+	"map_data": {
+		"grid_width": 64,
+		"grid_height": 40,
+		"path_cells": [],
+		"base_start_cell": [-1, -1],
+		"base_end_cell": [-1, -1],
+		"resources": {},
+		"enemy_towers": [],
+		"auto_generate": true
+	}
+}

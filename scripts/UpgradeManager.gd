@@ -88,7 +88,12 @@ func get_upgrade_modal_target() -> Node2D:
 func base_max_level() -> int:
 	if _main == null or _main.base_upgrade_times.is_empty():
 		return 1
-	return _main.base_upgrade_times.size() + 1
+	var max_from_upgrades: int = _main.base_upgrade_times.size() + 1
+	# Apply campaign cap if in campaign mode
+	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
+		var campaign_cap: int = CampaignManager.get_max_base_level(CampaignManager.current_level_id)
+		return mini(max_from_upgrades, campaign_cap)
+	return max_from_upgrades
 
 func base_upgrade_cost_text() -> String:
 	if _main == null:

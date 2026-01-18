@@ -142,6 +142,11 @@ var _build_mode := "grunt_tower"
 var _base_start_cell := Vector2i(-1, -1)
 var _base_end_cell := Vector2i(-1, -1)
 var _editor_active := false
+var _performance_tracker: Node
+var _level_complete_ui: Node
+var _level_select_ui: Node
+var _splash_campaign_button: Button
+var _splash_sandbox_button: Button
 
 # Fog of War
 var _fog_revealed_column: int = -1  # Leftmost revealed column (lower = more revealed)
@@ -154,6 +159,7 @@ func _ready() -> void:
 	_setup_economy()
 	_setup_upgrade_manager()
 	_setup_ui_builder()
+	_setup_performance_tracker()
 	_economy.set_labels(_wood_label, _food_label, _stone_label, _iron_label, _unit_label)
 	_upgrade_manager._sync_ui_refs()
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -342,6 +348,11 @@ func _setup_map_editor() -> void:
 	add_child(_map_editor)
 	_map_editor.setup(self, _resource_spawner)
 
+func _setup_performance_tracker() -> void:
+	var PerformanceTrackerScript: Script = load("res://scripts/PerformanceTracker.gd")
+	_performance_tracker = PerformanceTrackerScript.new()
+	add_child(_performance_tracker)
+
 func _setup_resource_catalog() -> void:
 	var ResourceCatalogScript: Script = load("res://scripts/ResourceCatalog.gd")
 	_resource_catalog = ResourceCatalogScript.new()
@@ -513,12 +524,35 @@ func _reset_for_play() -> void:
 	_upgrade_manager.base_upgrade_in_progress = false
 	_game_state_manager.reset()
 	_upgrade_manager.set_upgrade_modal_visible(false)
+
+	# Apply campaign config if in campaign mode
+	var start_wood := starting_wood
+	var start_food := starting_food
+	var start_stone := starting_stone
+	var start_iron := starting_iron
+	var spawn_rate := spawn_interval
+
+	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
+		var resources := CampaignManager.get_starting_resources(CampaignManager.current_level_id, CampaignManager.current_difficulty)
+		start_wood = int(resources.get("wood", starting_wood))
+		start_food = int(resources.get("food", starting_food))
+		start_stone = int(resources.get("stone", starting_stone))
+		start_iron = int(resources.get("iron", starting_iron))
+		spawn_rate = CampaignManager.get_spawn_interval(CampaignManager.current_level_id, CampaignManager.current_difficulty)
+
 	if _economy != null:
-		_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
+		_economy.configure_resources(start_wood, start_food, start_stone, start_iron, base_resource_cap, unit_food_cost)
 		_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 		_economy.set_base_upgrade_in_progress(false)
+
 	if _enemy_timer != null:
+		_enemy_timer.wait_time = spawn_rate
 		_enemy_timer.start()
+
+	# Start performance tracking
+	if _performance_tracker != null:
+		_performance_tracker.start_tracking()
+
 	queue_redraw()
 
 func _cleanup_runtime_nodes() -> void:
@@ -801,6 +835,10 @@ func _spawn_enemy() -> void:
 		return
 	var enemy: Node2D = preload("res://scenes/Enemy.tscn").instantiate() as Node2D
 	enemy.path_points = _get_path_points()
+	# Apply campaign multipliers
+	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
+		enemy.hp_multiplier = CampaignManager.get_enemy_hp_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
+		enemy.damage_multiplier = CampaignManager.get_enemy_damage_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
 	enemy.reached_goal.connect(_on_enemy_reached_goal.bind(enemy))
 	add_child(enemy)
 
@@ -819,14 +857,50 @@ func _on_unit_removed(unit: Node2D) -> void:
 	if unit != null and is_instance_valid(unit):
 		unit.queue_free()
 	_economy.on_unit_removed()
+	if _performance_tracker != null and _performance_tracker.is_tracking():
+		_performance_tracker.record_unit_lost()
 
 func _on_base_died(is_player_base: bool) -> void:
 	_game_state_manager.on_game_over(is_player_base)
+	_handle_level_end(is_player_base)
+
+func _handle_level_end(is_player_base: bool) -> void:
+	if _performance_tracker != null and _performance_tracker.has_method("stop_tracking"):
+		_performance_tracker.stop_tracking()
+
+	if not CampaignManager.is_campaign_mode:
+		return
+
+	var victory: bool = not is_player_base
+	var base_hp: int = 0
+	var base_max_hp: int = 25
+	if _base_end != null:
+		base_hp = _base_end.hp
+		base_max_hp = _base_end.max_hp
+
+	var result: RefCounted = _performance_tracker.build_result(
+		CampaignManager.current_level_id,
+		CampaignManager.current_difficulty,
+		victory,
+		base_hp,
+		base_max_hp
+	)
+
+	CampaignManager.record_level_completion(result)
+
+	# Show level complete UI if available
+	if _level_complete_ui != null and _level_complete_ui.has_method("show_result"):
+		_level_complete_ui.call("show_result", result)
+		_game_over_panel.visible = false
 
 func _on_restart_pressed() -> void:
 	get_tree().reload_current_scene.call_deferred()
 
 func _on_play_pressed() -> void:
+	_on_sandbox_pressed()
+
+func _on_sandbox_pressed() -> void:
+	CampaignManager.exit_campaign()
 	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
 	_set_upgrade_modal_visible(false)
@@ -844,6 +918,62 @@ func _on_play_pressed() -> void:
 		_reset_for_play()
 	else:
 		_reset_game()
+
+func _on_campaign_pressed() -> void:
+	_splash_panel.visible = false
+	if _level_select_ui != null:
+		_level_select_ui.visible = true
+		if _level_select_ui.has_method("show_ui"):
+			_level_select_ui.call("show_ui")
+
+func _on_level_selected(level_id: String, difficulty: String) -> void:
+	CampaignManager.start_campaign_level(level_id, difficulty)
+	if _level_select_ui != null:
+		_level_select_ui.visible = false
+
+	_game_state_manager.set_splash_active(false)
+	_set_editor_active(false)
+	_set_upgrade_modal_visible(false)
+
+	# Apply campaign map if specified
+	var map_data := CampaignManager.get_map_data(level_id)
+	if not map_data.is_empty() and not map_data.get("auto_generate", true):
+		if _map_editor.apply_map_data(map_data):
+			_map_editor.map_data = map_data
+			_map_editor.use_custom_map = true
+			_reset_for_play()
+			return
+
+	# Use auto-generated map
+	_map_editor.use_custom_map = false
+	_reset_game()
+
+func _on_level_select_back() -> void:
+	if _level_select_ui != null:
+		_level_select_ui.visible = false
+	_splash_panel.visible = true
+
+func _on_level_retry() -> void:
+	if _game_over_panel != null:
+		_game_over_panel.visible = false
+	_reset_for_play()
+
+func _on_next_level() -> void:
+	var next_level := CampaignManager.get_next_level()
+	if next_level != "":
+		_on_level_selected(next_level, "easy")
+
+func _on_level_select_from_complete() -> void:
+	if _game_over_panel != null:
+		_game_over_panel.visible = false
+	_game_state_manager.set_splash_active(true)
+	_on_campaign_pressed()
+
+func _on_main_menu_from_complete() -> void:
+	CampaignManager.exit_campaign()
+	if _game_over_panel != null:
+		_game_over_panel.visible = false
+	_game_state_manager.set_splash_active(true)
 
 func _on_resume_pressed() -> void:
 	_game_state_manager.set_paused(false)
