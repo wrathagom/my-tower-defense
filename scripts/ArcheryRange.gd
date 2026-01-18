@@ -11,7 +11,7 @@ func _ready() -> void:
 	position = Vector2(cell.x * cell_size, cell.y * cell_size)
 	queue_redraw()
 
-func set_upgrade_indicator(show: bool, can_upgrade: bool) -> void:
+func set_upgrade_indicator(show: bool, can_upgrade: bool, _cost_text: String = "") -> void:
 	_show_upgrade_indicator = show
 	_can_upgrade = can_upgrade
 	queue_redraw()

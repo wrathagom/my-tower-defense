@@ -91,11 +91,23 @@ var _game_over_panel: PanelContainer
 var _game_over_label: Label
 var _game_over_button: Button
 var _game_over_exit_button: Button
+var _upgrade_modal: PanelContainer
+var _upgrade_modal_title: Label
+var _upgrade_modal_level: Label
+var _upgrade_modal_cost: Label
+var _upgrade_modal_unlocks: Label
+var _upgrade_modal_button: Button
+var _upgrade_modal_close: Button
+var _upgrade_modal_target: Node2D
+var _upgrade_modal_type := ""
 var _game_over := false
 var _wood_label: Label
 var _build_label: Label
 var _base_label: Label
 var _upgrade_button: Button
+var _build_category_box: HBoxContainer
+var _build_category_buttons: Dictionary = {}
+var _build_category := ""
 var _build_buttons_box: HBoxContainer
 var _build_buttons: Dictionary = {}
 var _building_catalog: Node
@@ -167,6 +179,8 @@ func _process(_delta: float) -> void:
 		_update_camera_controls(_delta)
 		queue_redraw()
 		return
+	if _upgrade_modal != null and _upgrade_modal.visible:
+		_update_upgrade_modal()
 	if _placement != null:
 		_placement.update_hover(get_global_mouse_position(), _build_mode)
 	_update_camera_controls(_delta)
@@ -203,11 +217,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_add_path_cell(world_pos)
 		else:
 			if _is_over_player_base(world_pos):
-				_try_upgrade_base()
+				_show_upgrade_modal("base", _base_end)
 				return
 			var range := _get_archery_range_at(world_pos)
 			if range != null:
-				_try_upgrade_archery_range(range)
+				_show_upgrade_modal("archery_range", range)
 				return
 			if _placement != null:
 				_placement.handle_build_click(world_pos, _build_mode)
@@ -273,9 +287,13 @@ func _setup_buildings() -> void:
 	_building_catalog = BuildingCatalogScript.new()
 	add_child(_building_catalog)
 	_building_defs = _building_catalog.build_defs(self)
+	_build_build_categories()
 	_build_build_buttons()
 	_economy.set_build_defs(_building_defs)
 	_economy.set_build_buttons(_build_buttons, _upgrade_button)
+	if _build_category == "":
+		_build_category = _default_build_category()
+	_set_build_category(_build_category)
 	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 
 	var order: Array[String] = _building_catalog.get_order()
@@ -304,13 +322,55 @@ func _build_build_buttons() -> void:
 		if not _building_defs.has(building_id):
 			continue
 		var def: Dictionary = _building_defs[building_id]
+		if _build_category != "" and str(def.get("category", "")) != _build_category:
+			continue
 		var button := Button.new()
+		button.toggle_mode = true
 		var label: String = str(def.get("label", building_id))
 		var cost_label: String = _building_cost_label(def)
 		button.text = label if cost_label == "" else "%s (%s)" % [label, cost_label]
 		button.pressed.connect(Callable(self, "_set_build_mode").bind(building_id))
 		_build_buttons_box.add_child(button)
 		_build_buttons[building_id] = button
+
+func _build_build_categories() -> void:
+	if _build_category_box == null or _building_catalog == null:
+		return
+	for child in _build_category_box.get_children():
+		child.queue_free()
+	_build_category_buttons.clear()
+	var categories: Array[String] = _building_catalog.get_categories()
+	for category in categories:
+		var button := Button.new()
+		button.text = category
+		button.pressed.connect(Callable(self, "_set_build_category").bind(category))
+		_build_category_box.add_child(button)
+		_build_category_buttons[category] = button
+
+func _set_build_category(category: String) -> void:
+	_build_category = category
+	_build_build_buttons()
+	if _economy != null:
+		_economy.set_build_buttons(_build_buttons, _upgrade_button)
+		_economy.set_build_category_filter("")
+		_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	if _build_category_buttons.has(category):
+		_set_build_mode_for_category(category)
+
+func _set_build_mode_for_category(category: String) -> void:
+	for building_id in _building_defs.keys():
+		var def: Dictionary = _building_defs[building_id]
+		if str(def.get("category", "")) == category:
+			_set_build_mode(building_id)
+			return
+
+func _default_build_category() -> String:
+	if _building_catalog == null:
+		return ""
+	var categories: Array[String] = _building_catalog.get_categories()
+	if categories.is_empty():
+		return ""
+	return categories[0]
 
 func _building_cost_label(def: Dictionary) -> String:
 	var parts: Array[String] = []
@@ -398,6 +458,7 @@ func _reset_for_play() -> void:
 	_game_over = false
 	if _game_over_panel != null:
 		_game_over_panel.visible = false
+	_set_upgrade_modal_visible(false)
 	if _economy != null:
 		_economy.configure_resources(starting_wood, starting_food, starting_stone, base_resource_cap, unit_food_cost)
 		_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
@@ -483,6 +544,7 @@ func _set_splash_active(active: bool) -> void:
 	if active:
 		_set_fast_forward(false)
 		_set_paused(false)
+		_set_upgrade_modal_visible(false)
 
 func _set_paused(active: bool) -> void:
 	if _game_over:
@@ -496,6 +558,8 @@ func _set_paused(active: bool) -> void:
 			_enemy_timer.stop()
 		else:
 			_enemy_timer.start()
+	if active:
+		_set_upgrade_modal_visible(false)
 
 func _base_label_text() -> String:
 	return "Base L%d | Zone: %d" % [_base_level, player_zone_width]
@@ -518,18 +582,103 @@ func _set_build_mode(mode: String) -> void:
 			_build_label.text = "Build: %s" % label
 		else:
 			_build_label.text = "Build: "
+	for key in _build_buttons.keys():
+		var button := _build_buttons[key] as Button
+		if button == null:
+			continue
+		button.button_pressed = key == mode
+		if mode == "":
+			button.release_focus()
+
+func _show_upgrade_modal(kind: String, target: Node2D) -> void:
+	if _upgrade_modal == null:
+		return
+	_upgrade_modal_type = kind
+	_upgrade_modal_target = target
+	_set_upgrade_modal_visible(true)
+	_update_upgrade_modal()
+
+func _set_upgrade_modal_visible(visible: bool) -> void:
+	if _upgrade_modal != null:
+		_upgrade_modal.visible = visible
+	if not visible:
+		_upgrade_modal_type = ""
+		_upgrade_modal_target = null
+
+func _update_upgrade_modal() -> void:
+	if _upgrade_modal == null or not _upgrade_modal.visible:
+		return
+	if _upgrade_modal_type == "base":
+		_upgrade_modal_title.text = "Upgrade Base"
+		_upgrade_modal_level.text = "Level: %d / %d" % [_base_level, _base_max_level()]
+		_upgrade_modal_cost.text = "Cost: %s" % _base_upgrade_cost_text()
+		_upgrade_modal_unlocks.text = "Unlocks: %s" % _base_upgrade_unlocks()
+		_upgrade_modal_button.disabled = not _can_upgrade_base()
+	elif _upgrade_modal_type == "archery_range":
+		var range := _upgrade_modal_target
+		var level_value := 1
+		if range != null and is_instance_valid(range) and range.get("level") != null:
+			level_value = int(range.get("level"))
+		_upgrade_modal_title.text = "Upgrade Archery Range"
+		_upgrade_modal_level.text = "Level: %d / %d" % [level_value, 2]
+		_upgrade_modal_cost.text = "Cost: %dW %dS" % [archery_range_upgrade_cost, archery_range_upgrade_stone_cost]
+		_upgrade_modal_unlocks.text = "Unlocks: Archer, Archer Tower"
+		_upgrade_modal_button.disabled = not _can_upgrade_archery(range)
+	else:
+		_upgrade_modal_title.text = "Upgrade"
+		_upgrade_modal_level.text = "Level: -"
+		_upgrade_modal_cost.text = "Cost: -"
+		_upgrade_modal_unlocks.text = "Unlocks: -"
+		_upgrade_modal_button.disabled = true
+
+func _base_max_level() -> int:
+	if base_upgrade_times.is_empty():
+		return 1
+	return base_upgrade_times.size() + 1
+
+func _base_upgrade_cost_text() -> String:
+	if _base_level >= 2:
+		return "%dW %dS" % [base_upgrade_cost, base_upgrade_stone_cost]
+	return "%dW" % base_upgrade_cost
+
+func _base_upgrade_unlocks() -> String:
+	if _base_level == 1:
+		return "Stonecutter, Archery Range, Stone Storage, Stone Thrower"
+	if _base_level >= 2:
+		return "More build radius"
+	return "-"
+
+func _can_upgrade_base() -> bool:
+	if _base_end == null:
+		return false
+	if _base_upgrade_in_progress:
+		return false
+	if _base_level >= _base_max_level():
+		return false
+	if not _economy.can_afford_wood(base_upgrade_cost):
+		return false
+	if _base_level >= 2 and _economy.stone < base_upgrade_stone_cost:
+		return false
+	return true
+
+func _can_upgrade_archery(range: Node2D) -> bool:
+	if range == null or not is_instance_valid(range):
+		return false
+	if _archery_range_level >= 2:
+		return false
+	if range.get("upgrade_in_progress") == true:
+		return false
+	if not _economy.can_afford_wood(archery_range_upgrade_cost):
+		return false
+	if _economy.stone < archery_range_upgrade_stone_cost:
+		return false
+	return true
 
 func _on_upgrade_base_pressed() -> void:
-	_try_upgrade_base()
+	_show_upgrade_modal("base", _base_end)
 
 func _try_upgrade_base() -> void:
-	if _base_end == null:
-		return
-	if _base_upgrade_in_progress:
-		return
-	if not _economy.can_afford_wood(base_upgrade_cost):
-		return
-	if _base_level >= 2 and _economy.stone < base_upgrade_stone_cost:
+	if not _can_upgrade_base():
 		return
 	_economy.spend_wood(base_upgrade_cost)
 	if _base_level >= 2:
@@ -804,17 +953,7 @@ func _get_archery_range_at(world_pos: Vector2) -> Node2D:
 	return null
 
 func _try_upgrade_archery_range(range: Node2D) -> void:
-	if range == null or not is_instance_valid(range):
-		return
-	if _archery_range_level >= 2:
-		return
-	if range.get("level") != null and int(range.get("level")) >= 2:
-		return
-	if range.get("upgrade_in_progress") == true:
-		return
-	if not _economy.can_afford_wood(archery_range_upgrade_cost):
-		return
-	if _economy.stone < archery_range_upgrade_stone_cost:
+	if not _can_upgrade_archery(range):
 		return
 	_economy.spend_wood(archery_range_upgrade_cost)
 	_economy.spend_stone(archery_range_upgrade_stone_cost)
@@ -838,9 +977,10 @@ func _update_archery_range_indicators() -> void:
 		if range == null or not is_instance_valid(range):
 			continue
 		var show: bool = _archery_range_level < 2 and range.get("upgrade_in_progress") != true
-		var can_upgrade: bool = _economy.can_afford_wood(archery_range_upgrade_cost) and _economy.stone >= archery_range_upgrade_stone_cost
+		var can_upgrade: bool = _can_upgrade_archery(range)
 		if range.has_method("set_upgrade_indicator"):
-			range.call("set_upgrade_indicator", show, can_upgrade)
+			var cost_text := "%dW %dS" % [archery_range_upgrade_cost, archery_range_upgrade_stone_cost]
+			range.call("set_upgrade_indicator", show, can_upgrade, cost_text)
 
 func _register_archery_range(range: Node2D) -> void:
 	_archery_ranges.append(range)
@@ -862,11 +1002,10 @@ func _is_over_player_base(world_pos: Vector2) -> bool:
 func _update_base_upgrade_indicator() -> void:
 	if _base_end == null:
 		return
-	var can_upgrade: bool = _economy.can_afford_wood(base_upgrade_cost)
-	if _base_level >= 2:
-		can_upgrade = can_upgrade and _economy.stone >= base_upgrade_stone_cost
-	var show := not _base_upgrade_in_progress
-	_base_end.set_upgrade_indicator(show, can_upgrade)
+	var can_upgrade := _can_upgrade_base()
+	var show := not _base_upgrade_in_progress and _base_level < _base_max_level()
+	var cost_text := _base_upgrade_cost_text()
+	_base_end.set_upgrade_indicator(show, can_upgrade, cost_text)
 
 func _spawn_construction(top_left: Vector2i, size: int, duration: float) -> Node2D:
 	var ConstructionScript: Script = load("res://scripts/Construction.gd")
@@ -994,6 +1133,7 @@ func _on_base_died(is_player_base: bool) -> void:
 		return
 	_game_over = true
 	_enemy_timer.stop()
+	_set_upgrade_modal_visible(false)
 	for button in _spawn_buttons.values():
 		var node := button as Button
 		if node != null:
@@ -1007,6 +1147,7 @@ func _on_restart_pressed() -> void:
 func _on_play_pressed() -> void:
 	_set_splash_active(false)
 	_set_editor_active(false)
+	_set_upgrade_modal_visible(false)
 	var map_name := _get_selected_map_name()
 	if map_name != "":
 		var MapIOScript: Script = load("res://scripts/MapIO.gd")
@@ -1030,6 +1171,18 @@ func _on_menu_pressed() -> void:
 
 func _on_speed_pressed() -> void:
 	_set_fast_forward(not _fast_forward)
+
+func _on_upgrade_modal_pressed() -> void:
+	if _upgrade_modal_type == "base":
+		_try_upgrade_base()
+	elif _upgrade_modal_type == "archery_range":
+		var range := _upgrade_modal_target
+		if range != null and is_instance_valid(range):
+			_try_upgrade_archery_range(range)
+	_update_upgrade_modal()
+
+func _on_upgrade_modal_close_pressed() -> void:
+	_set_upgrade_modal_visible(false)
 
 func _on_create_map_pressed() -> void:
 	_set_splash_active(false)

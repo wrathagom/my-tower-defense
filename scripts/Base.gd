@@ -36,7 +36,7 @@ func reset_hp() -> void:
 	_hp = max_hp
 	queue_redraw()
 
-func set_upgrade_indicator(show: bool, can_upgrade: bool) -> void:
+func set_upgrade_indicator(show: bool, can_upgrade: bool, _cost_text: String = "") -> void:
 	_show_upgrade_indicator = show
 	_can_upgrade = can_upgrade
 	queue_redraw()

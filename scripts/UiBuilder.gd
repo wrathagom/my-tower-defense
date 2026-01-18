@@ -123,6 +123,58 @@ func build(main: Node) -> void:
 	main._game_over_exit_button.pressed.connect(main._on_exit_pressed)
 	game_over_box.add_child(main._game_over_exit_button)
 
+	main._upgrade_modal = PanelContainer.new()
+	main._upgrade_modal.visible = false
+	main._upgrade_modal.size = Vector2(360, 220)
+	main._upgrade_modal.anchor_left = 0.5
+	main._upgrade_modal.anchor_top = 0.5
+	main._upgrade_modal.anchor_right = 0.5
+	main._upgrade_modal.anchor_bottom = 0.5
+	main._upgrade_modal.offset_left = -180
+	main._upgrade_modal.offset_top = -110
+	main._upgrade_modal.offset_right = 180
+	main._upgrade_modal.offset_bottom = 110
+	main._hud_root.add_child(main._upgrade_modal)
+
+	var upgrade_box: VBoxContainer = VBoxContainer.new()
+	upgrade_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	upgrade_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	upgrade_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	upgrade_box.add_theme_constant_override("separation", 8)
+	main._upgrade_modal.add_child(upgrade_box)
+
+	main._upgrade_modal_title = Label.new()
+	main._upgrade_modal_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	main._upgrade_modal_title.text = "Upgrade"
+	upgrade_box.add_child(main._upgrade_modal_title)
+
+	main._upgrade_modal_level = Label.new()
+	main._upgrade_modal_level.text = "Level: 1 / 1"
+	upgrade_box.add_child(main._upgrade_modal_level)
+
+	main._upgrade_modal_cost = Label.new()
+	main._upgrade_modal_cost.text = "Cost: -"
+	upgrade_box.add_child(main._upgrade_modal_cost)
+
+	main._upgrade_modal_unlocks = Label.new()
+	main._upgrade_modal_unlocks.text = "Unlocks: -"
+	upgrade_box.add_child(main._upgrade_modal_unlocks)
+
+	var upgrade_button_row: HBoxContainer = HBoxContainer.new()
+	upgrade_button_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	upgrade_button_row.add_theme_constant_override("separation", 8)
+	upgrade_box.add_child(upgrade_button_row)
+
+	main._upgrade_modal_button = Button.new()
+	main._upgrade_modal_button.text = "Upgrade"
+	main._upgrade_modal_button.pressed.connect(main._on_upgrade_modal_pressed)
+	upgrade_button_row.add_child(main._upgrade_modal_button)
+
+	main._upgrade_modal_close = Button.new()
+	main._upgrade_modal_close.text = "Close"
+	main._upgrade_modal_close.pressed.connect(main._on_upgrade_modal_close_pressed)
+	upgrade_button_row.add_child(main._upgrade_modal_close)
+
 	var right_panel: PanelContainer = PanelContainer.new()
 	right_panel.anchor_left = 1.0
 	right_panel.anchor_right = 1.0
@@ -154,7 +206,7 @@ func build(main: Node) -> void:
 	bottom_panel.anchor_bottom = 1.0
 	bottom_panel.offset_left = 16
 	bottom_panel.offset_right = -16
-	bottom_panel.offset_top = -96
+	bottom_panel.offset_top = -160
 	bottom_panel.offset_bottom = -16
 	main._hud_root.add_child(bottom_panel)
 
@@ -168,6 +220,15 @@ func build(main: Node) -> void:
 	build_header.text = "Buildings"
 	bottom_box.add_child(build_header)
 	bottom_box.add_child(main._build_label)
+
+	var category_row: HBoxContainer = HBoxContainer.new()
+	category_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	category_row.add_theme_constant_override("separation", 8)
+	bottom_box.add_child(category_row)
+	main._build_category_box = HBoxContainer.new()
+	main._build_category_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main._build_category_box.add_theme_constant_override("separation", 8)
+	category_row.add_child(main._build_category_box)
 
 	var button_row: HBoxContainer = HBoxContainer.new()
 	button_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL

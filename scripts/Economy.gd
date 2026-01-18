@@ -34,6 +34,7 @@ var spawn_buttons: Dictionary = {}
 var unit_defs: Dictionary = {}
 var build_buttons: Dictionary = {}
 var build_defs: Dictionary = {}
+var build_category_filter := ""
 var archery_level: int = 0
 var upgrade_button: Button
 var base_level: int = 1
@@ -91,6 +92,10 @@ func set_build_buttons(buttons: Dictionary, upgrade_button_value: Button) -> voi
 
 func set_build_defs(defs: Dictionary) -> void:
 	build_defs = defs
+	_update_buttons(base_level)
+
+func set_build_category_filter(category: String) -> void:
+	build_category_filter = category
 	_update_buttons(base_level)
 
 func set_spawn_buttons(buttons: Dictionary) -> void:
@@ -278,9 +283,10 @@ func _update_build_buttons(base_level_value: int) -> void:
 			button.visible = false
 			continue
 		var unlocked := _requirements_met(def, base_level_value, archery_level)
+		var matches := build_category_filter == "" or str(def.get("category", "")) == build_category_filter
 		var can_build := unlocked and can_afford_cost(def)
 		button.disabled = not can_build
-		button.visible = unlocked
+		button.visible = unlocked and matches
 
 func _requirements_met(def: Dictionary, base_level_value: int, archery_level_value: int) -> bool:
 	var requirements: Array = def.get("requirements", [])

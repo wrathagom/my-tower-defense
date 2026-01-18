@@ -14,6 +14,7 @@ const ORDER := [
 	"food_storage",
 	"stone_storage",
 ]
+const CATEGORY_ORDER := ["Towers", "Production", "Military", "Housing", "Storage"]
 
 func get_order() -> Array[String]:
 	var order: Array[String] = []
@@ -21,10 +22,17 @@ func get_order() -> Array[String]:
 		order.append(building_id)
 	return order
 
+func get_categories() -> Array[String]:
+	var categories: Array[String] = []
+	for category in CATEGORY_ORDER:
+		categories.append(category)
+	return categories
+
 func build_defs(main: Node) -> Dictionary:
 	return {
 		"grunt_tower": {
 			"label": "Grunt Tower",
+			"category": "Towers",
 			"spawn_type": "script",
 			"path": "res://scripts/GruntTower.gd",
 			"size": 1,
@@ -36,6 +44,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"stone_tower": {
 			"label": "Stone Tower",
+			"category": "Towers",
 			"spawn_type": "script",
 			"path": "res://scripts/StoneTower.gd",
 			"size": 1,
@@ -50,6 +59,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"archer_tower": {
 			"label": "Archer Tower",
+			"category": "Towers",
 			"spawn_type": "script",
 			"path": "res://scripts/ArcherTower.gd",
 			"size": 1,
@@ -64,6 +74,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"woodcutter": {
 			"label": "Woodcutter",
+			"category": "Production",
 			"spawn_type": "scene",
 			"path": "res://scenes/Woodcutter.tscn",
 			"size": 2,
@@ -75,6 +86,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"stonecutter": {
 			"label": "Stonecutter",
+			"category": "Production",
 			"spawn_type": "scene",
 			"path": "res://scenes/Stonecutter.tscn",
 			"size": 2,
@@ -86,6 +98,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"archery_range": {
 			"label": "Archery Range",
+			"category": "Military",
 			"spawn_type": "scene",
 			"path": "res://scenes/ArcheryRange.tscn",
 			"size": 3,
@@ -97,6 +110,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"house": {
 			"label": "House",
+			"category": "Housing",
 			"spawn_type": "scene",
 			"path": "res://scenes/House.tscn",
 			"size": 2,
@@ -108,6 +122,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"farm": {
 			"label": "Farm",
+			"category": "Production",
 			"spawn_type": "scene",
 			"path": "res://scenes/Farm.tscn",
 			"size": 2,
@@ -119,6 +134,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"wood_storage": {
 			"label": "Wood Storage",
+			"category": "Storage",
 			"spawn_type": "scene",
 			"path": "res://scenes/WoodStorage.tscn",
 			"size": 2,
@@ -130,6 +146,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"food_storage": {
 			"label": "Food Storage",
+			"category": "Storage",
 			"spawn_type": "scene",
 			"path": "res://scenes/FoodStorage.tscn",
 			"size": 2,
@@ -141,6 +158,7 @@ func build_defs(main: Node) -> Dictionary:
 		},
 		"stone_storage": {
 			"label": "Stone Storage",
+			"category": "Storage",
 			"spawn_type": "scene",
 			"path": "res://scenes/StoneStorage.tscn",
 			"size": 2,
