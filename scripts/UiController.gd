@@ -6,9 +6,19 @@ const Base = preload("res://scripts/Base.gd")
 
 var hud_root: Control
 var splash_panel: PanelContainer
+var splash_play_button: Button
+var splash_create_button: Button
+var splash_exit_button: Button
+var splash_campaign_button: Button
+var splash_sandbox_button: Button
+var splash_map_label: Label
 var pause_panel: PanelContainer
+var pause_resume_button: Button
+var pause_exit_button: Button
 var game_over_panel: PanelContainer
 var game_over_label: Label
+var game_over_button: Button
+var game_over_exit_button: Button
 var speed_button: Button
 var upgrade_modal: PanelContainer
 var upgrade_modal_title: Label
@@ -34,36 +44,24 @@ var stone_label: Label
 var iron_label: Label
 var unit_label: Label
 
-func capture_from_main(main: Node) -> void:
-	hud_root = main._hud_root
-	splash_panel = main._splash_panel
-	pause_panel = main._pause_panel
-	game_over_panel = main._game_over_panel
-	game_over_label = main._game_over_label
-	speed_button = main._speed_button
-	upgrade_modal = main._upgrade_modal
-	upgrade_modal_title = main._upgrade_modal_title
-	upgrade_modal_level = main._upgrade_modal_level
-	upgrade_modal_cost = main._upgrade_modal_cost
-	upgrade_modal_unlocks = main._upgrade_modal_unlocks
-	upgrade_modal_button = main._upgrade_modal_button
-	upgrade_modal_close = main._upgrade_modal_close
-	build_label = main._build_label
-	build_category_box = main._build_category_box
-	build_buttons_box = main._build_buttons_box
-	spawn_units_box = main._spawn_units_box
-	stats_panel = main._stats_panel
-	stats_base_level_label = main._stats_base_level_label
-	stats_timer_label = main._stats_timer_label
-	stats_units_label = main._stats_units_label
-	stats_enemies_label = main._stats_enemies_label
-	stats_stars_box = main._stats_stars_box
-	splash_map_select = main._splash_map_select
-	wood_label = main._wood_label
-	food_label = main._food_label
-	stone_label = main._stone_label
-	iron_label = main._iron_label
-	unit_label = main._unit_label
+func validate() -> void:
+	_validate_wiring()
+
+func _validate_wiring() -> void:
+	if hud_root == null:
+		push_error("UiController missing hud_root")
+	if splash_panel == null:
+		push_error("UiController missing splash_panel")
+	if pause_panel == null:
+		push_error("UiController missing pause_panel")
+	if game_over_panel == null:
+		push_error("UiController missing game_over_panel")
+	if speed_button == null:
+		push_error("UiController missing speed_button")
+	if stats_panel == null:
+		push_error("UiController missing stats_panel")
+	if build_label == null:
+		push_error("UiController missing build_label")
 
 func set_hud_visible(visible: bool) -> void:
 	if hud_root != null:

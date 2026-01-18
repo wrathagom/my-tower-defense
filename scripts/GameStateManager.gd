@@ -51,8 +51,8 @@ func set_splash_active(active: bool) -> void:
 	if active:
 		set_fast_forward(false)
 		set_paused(false)
-		if _main != null and _main.has_method("_set_upgrade_modal_visible"):
-			_main._set_upgrade_modal_visible(false)
+		if _main != null and _main._upgrade_manager != null:
+			_main._upgrade_manager.set_upgrade_modal_visible(false)
 	state_changed.emit("splash" if active else "playing")
 
 func set_paused(active: bool) -> void:
@@ -68,8 +68,8 @@ func set_paused(active: bool) -> void:
 			_enemy_timer.stop()
 		else:
 			_enemy_timer.start()
-	if active and _main != null and _main.has_method("_set_upgrade_modal_visible"):
-		_main._set_upgrade_modal_visible(false)
+	if active and _main != null and _main._upgrade_manager != null:
+		_main._upgrade_manager.set_upgrade_modal_visible(false)
 	state_changed.emit("paused" if active else "playing")
 
 func set_fast_forward(active: bool) -> void:
@@ -87,8 +87,8 @@ func on_game_over(is_player_base: bool) -> void:
 	_game_over = true
 	if _enemy_timer != null:
 		_enemy_timer.stop()
-	if _main != null and _main.has_method("_set_upgrade_modal_visible"):
-		_main._set_upgrade_modal_visible(false)
+	if _main != null and _main._upgrade_manager != null:
+		_main._upgrade_manager.set_upgrade_modal_visible(false)
 	if _main != null:
 		var spawn_buttons: Dictionary = _main._spawn_buttons
 		for button in spawn_buttons.values():

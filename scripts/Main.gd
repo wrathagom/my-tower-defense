@@ -18,54 +18,20 @@ var _base_end: Base
 var _ui_layer: CanvasLayer
 var _ui_builder: Node
 var _ui_controller: UiController
-var _hud_root: Control
-var _splash_panel: PanelContainer
-var _splash_play_button: Button
-var _splash_create_button: Button
-var _splash_exit_button: Button
-var _splash_map_label: Label
-var _splash_map_select: OptionButton
-var _pause_panel: PanelContainer
-var _pause_resume_button: Button
-var _pause_exit_button: Button
-var _speed_button: Button
 var _editor_panel: PanelContainer
 var _editor_name_input: LineEdit
 var _editor_status_label: Label
 var _editor_tool_label: Label
-var _spawn_units_box: VBoxContainer
 var _spawn_buttons: Dictionary = {}
 var _unit_defs: Dictionary = {}
 var _unit_catalog: Node
 var _unit_spawner: Node
-var _game_over_panel: PanelContainer
-var _game_over_label: Label
-var _game_over_button: Button
-var _game_over_exit_button: Button
-var _upgrade_modal: PanelContainer
-var _upgrade_modal_title: Label
-var _upgrade_modal_level: Label
-var _upgrade_modal_cost: Label
-var _upgrade_modal_unlocks: Label
-var _upgrade_modal_button: Button
-var _upgrade_modal_close: Button
-var _upgrade_modal_target: Node2D
-var _upgrade_modal_type := ""
-var _wood_label: Label
-var _build_label: Label
-var _base_label: Label
 var _upgrade_button: Button
-var _build_category_box: HBoxContainer
 var _build_category_buttons: Dictionary = {}
 var _build_category := ""
-var _build_buttons_box: HBoxContainer
 var _build_buttons: Dictionary = {}
 var _building_catalog: Node
 var _building_defs: Dictionary = {}
-var _food_label: Label
-var _stone_label: Label
-var _iron_label: Label
-var _unit_label: Label
 var _economy: Node
 var _placement: Node
 var _resource_catalog: Node
@@ -88,14 +54,6 @@ var _performance_tracker: PerformanceTracker
 var _level_complete_ui: Node
 var _level_select_ui: Node
 var _level_launch_ui: Node
-var _splash_campaign_button: Button
-var _splash_sandbox_button: Button
-var _stats_panel: PanelContainer
-var _stats_base_level_label: Label
-var _stats_timer_label: Label
-var _stats_units_label: Label
-var _stats_enemies_label: Label
-var _stats_stars_box: VBoxContainer
 
 # Fog of War
 var _fog_revealed_column: int = -1  # Leftmost revealed column (lower = more revealed)
@@ -160,8 +118,8 @@ func _process(_delta: float) -> void:
 			_camera_controller.update(_delta, true)
 		queue_redraw()
 		return
-	if _upgrade_modal != null and _upgrade_modal.visible:
-		_update_upgrade_modal()
+	if _ui_controller != null and _ui_controller.upgrade_modal != null and _ui_controller.upgrade_modal.visible:
+		_upgrade_manager.update_upgrade_modal()
 	if _placement != null:
 		_placement.update_hover(get_global_mouse_position(), _build_mode)
 	if _camera_controller != null:
@@ -188,11 +146,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_add_path_cell(world_pos)
 		else:
 			if _is_over_player_base(world_pos):
-				_show_upgrade_modal("base", _base_end)
+				_upgrade_manager.show_upgrade_modal("base", _base_end)
 				return
 			var range := _get_archery_range_at(world_pos)
 			if range != null:
-				_show_upgrade_modal("archery_range", range)
+				_upgrade_manager.show_upgrade_modal("archery_range", range)
 				return
 			if _placement != null:
 				_placement.handle_build_click(world_pos, _build_mode)
@@ -209,8 +167,8 @@ func _setup_ui_builder() -> void:
 	add_child(_ui_builder)
 	_ui_controller = UiController.new()
 	add_child(_ui_controller)
-	_ui_builder.build(self)
-	_ui_controller.capture_from_main(self)
+	_ui_builder.build(self, _ui_controller)
+	_ui_controller.validate()
 
 func _setup_economy() -> void:
 	var EconomyScript: Script = load("res://scripts/Economy.gd")
@@ -576,16 +534,11 @@ func _reset_bases() -> void:
 		_base_end.reset_hp()
 
 func _update_base_label() -> void:
-	if _base_label != null:
-		_base_label.text = _base_label_text()
 	_update_upgrade_button_text()
 	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 	_economy.set_base_upgrade_in_progress(_upgrade_manager.base_upgrade_in_progress)
 	_upgrade_manager.update_base_upgrade_indicator()
 	_economy.set_archery_level(_upgrade_manager.archery_range_level)
-
-func _base_label_text() -> String:
-	return "Base L%d | Zone: %d" % [_upgrade_manager.base_level, config.player_zone_width]
 
 func _upgrade_button_text() -> String:
 	if _upgrade_manager.base_level >= 2:
@@ -613,17 +566,8 @@ func _set_build_mode(mode: String) -> void:
 		if mode == "":
 			button.release_focus()
 
-func _show_upgrade_modal(kind: String, target: Node2D) -> void:
-	_upgrade_manager.show_upgrade_modal(kind, target)
-
-func _set_upgrade_modal_visible(visible: bool) -> void:
-	_upgrade_manager.set_upgrade_modal_visible(visible)
-
-func _update_upgrade_modal() -> void:
-	_upgrade_manager.update_upgrade_modal()
-
 func _on_upgrade_base_pressed() -> void:
-	_show_upgrade_modal("base", _base_end)
+	_upgrade_manager.show_upgrade_modal("base", _base_end)
 
 func _generate_random_path() -> void:
 	if _path_generator == null:
@@ -889,7 +833,7 @@ func _on_sandbox_pressed() -> void:
 	CampaignManager.exit_campaign()
 	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
-	_set_upgrade_modal_visible(false)
+	_upgrade_manager.set_upgrade_modal_visible(false)
 	var map_name := _get_selected_map_name()
 	if map_name != "":
 		var MapIOScript: Script = load("res://scripts/MapIO.gd")
@@ -934,7 +878,7 @@ func _on_level_selected(level_id: String, difficulty: String) -> void:
 
 	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
-	_set_upgrade_modal_visible(false)
+	_upgrade_manager.set_upgrade_modal_visible(false)
 
 	# Apply campaign map if specified
 	var map_data := CampaignManager.get_map_data(level_id)
@@ -997,7 +941,7 @@ func _on_upgrade_modal_pressed() -> void:
 	_upgrade_manager.update_upgrade_modal()
 
 func _on_upgrade_modal_close_pressed() -> void:
-	_set_upgrade_modal_visible(false)
+	_upgrade_manager.set_upgrade_modal_visible(false)
 
 func _on_create_map_pressed() -> void:
 	_game_state_manager.set_splash_active(false)
