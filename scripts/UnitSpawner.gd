@@ -52,4 +52,7 @@ func _is_unlocked(unit_def: Dictionary) -> bool:
 			elif req_type == "archery_level":
 				if main._archery_range_level < int(req.get("value", 0)):
 					return false
+			elif req_type == "barracks_level":
+				if main._barracks_level < int(req.get("value", 0)):
+					return false
 	return true

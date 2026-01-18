@@ -214,7 +214,9 @@ func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
 	elif effect == "archery_range":
 		main._archery_range_level = max(main._archery_range_level, 1)
 		main._register_archery_range(building)
-		economy.update_buttons_for_base_level(main._base_level, main._archery_range_level)
+	elif effect == "barracks":
+		main._register_barracks(building)
+		economy.update_buttons_for_base_level(main._base_level, main._archery_range_level, main._barracks_level)
 
 func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node2D:
 	var building: Node2D = load(scene_path).instantiate() as Node2D
@@ -293,6 +295,9 @@ func _requirements_met(def: Dictionary) -> bool:
 					return false
 			elif req_type == "archery_level":
 				if main._archery_range_level < int(req.get("value", 0)):
+					return false
+			elif req_type == "barracks_level":
+				if main._barracks_level < int(req.get("value", 0)):
 					return false
 	return true
 

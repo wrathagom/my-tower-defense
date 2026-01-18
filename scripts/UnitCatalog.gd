@@ -1,7 +1,7 @@
 extends Node
 class_name UnitCatalog
 
-const ORDER := ["grunt", "stone_thrower", "archer"]
+const ORDER := ["grunt", "stone_thrower", "archer", "swordsman"]
 
 func get_order() -> Array[String]:
 	var order: Array[String] = []
@@ -39,6 +39,18 @@ func build_defs(main: Node) -> Dictionary:
 			"requirements": [
 				{"type": "base_level", "value": 1},
 				{"type": "archery_level", "value": 2},
+			],
+		},
+		"swordsman": {
+			"label": "Swordsman",
+			"scene": "res://scenes/Swordsman.tscn",
+			"food_cost": main.swordsman_food_cost,
+			"wood_cost": 0,
+			"stone_cost": 0,
+			"iron_cost": main.swordsman_iron_cost,
+			"requirements": [
+				{"type": "base_level", "value": 3},
+				{"type": "barracks_level", "value": 1},
 			],
 		},
 	}

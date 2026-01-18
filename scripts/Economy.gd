@@ -39,6 +39,7 @@ var build_buttons: Dictionary = {}
 var build_defs: Dictionary = {}
 var build_category_filter := ""
 var archery_level: int = 0
+var barracks_level: int = 0
 var upgrade_button: Button
 var base_level: int = 1
 var base_upgrade_in_progress: bool = false
@@ -254,13 +255,18 @@ func add_iron_cap(amount: int) -> void:
 	iron = clampi(iron, 0, max_iron)
 	_update_all()
 
-func update_buttons_for_base_level(base_level_value: int, archery_level_value: int) -> void:
+func update_buttons_for_base_level(base_level_value: int, archery_level_value: int, barracks_level_value: int) -> void:
 	base_level = base_level_value
 	archery_level = archery_level_value
+	barracks_level = barracks_level_value
 	_update_buttons(base_level)
 
 func set_archery_level(value: int) -> void:
 	archery_level = value
+	_update_buttons(base_level)
+
+func set_barracks_level(value: int) -> void:
+	barracks_level = value
 	_update_buttons(base_level)
 
 func set_base_upgrade_in_progress(value: bool) -> void:
@@ -341,5 +347,8 @@ func _requirements_met(def: Dictionary, base_level_value: int, archery_level_val
 					return false
 			elif req_type == "archery_level":
 				if archery_level_value < int(req.get("value", 0)):
+					return false
+			elif req_type == "barracks_level":
+				if barracks_level < int(req.get("value", 0)):
 					return false
 	return true

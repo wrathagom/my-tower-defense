@@ -35,7 +35,11 @@ extends Node2D
 @export var stone_thrower_stone_cost := 1
 @export var archer_food_cost := 3
 @export var archer_wood_cost := 1
+@export var swordsman_food_cost := 3
+@export var swordsman_iron_cost := 1
 @export var archery_range_cost := 20
+@export var barracks_wood_cost := 20
+@export var barracks_stone_cost := 10
 @export var archery_range_upgrade_cost := 30
 @export var archery_range_upgrade_stone_cost := 10
 @export var archery_range_upgrade_time := 12.0
@@ -55,6 +59,7 @@ extends Node2D
 @export var build_time_stone_storage := 10.0
 @export var build_time_iron_storage := 10.0
 @export var build_time_archery_range := 10.0
+@export var build_time_barracks := 12.0
 @export var base_upgrade_times: Array[float] = [10.0, 15.0, 20.0]
 @export var zone_upgrade_amount := 3
 @export var restrict_path_to_base_band := false
@@ -135,6 +140,7 @@ var _enemy_tower_by_cell: Dictionary = {}
 var _build_mode := "grunt_tower"
 var _archery_range_level := 0
 var _archery_ranges: Array[Node2D] = []
+var _barracks_level := 0
 var _base_level := 1
 var _base_start_cell := Vector2i(-1, -1)
 var _base_end_cell := Vector2i(-1, -1)
@@ -266,12 +272,15 @@ func _setup_economy() -> void:
 		"stone_thrower_stone_cost": stone_thrower_stone_cost,
 		"archer_food_cost": archer_food_cost,
 		"archer_wood_cost": archer_wood_cost,
+		"swordsman_food_cost": swordsman_food_cost,
+		"swordsman_iron_cost": swordsman_iron_cost,
 	})
 	_economy.set_labels(_wood_label, _food_label, _stone_label, _iron_label, _unit_label)
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
 	_economy.set_archery_level(_archery_range_level)
+	_economy.set_barracks_level(_barracks_level)
 
 func _setup_units() -> void:
 	var UnitCatalogScript: Script = load("res://scripts/UnitCatalog.gd")
@@ -287,7 +296,7 @@ func _setup_units() -> void:
 	_build_spawn_buttons()
 	_economy.set_unit_defs(_unit_defs)
 	_economy.set_spawn_buttons(_spawn_buttons)
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
 
 func _setup_buildings() -> void:
@@ -302,7 +311,7 @@ func _setup_buildings() -> void:
 	if _build_category == "":
 		_build_category = _default_build_category()
 	_set_build_category(_build_category)
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 
 	var order: Array[String] = _building_catalog.get_order()
 	if not order.is_empty():
@@ -379,7 +388,7 @@ func _set_build_category(category: String) -> void:
 	if _economy != null:
 		_economy.set_build_buttons(_build_buttons, _upgrade_button)
 		_economy.set_build_category_filter("")
-		_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+		_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	if _build_category_buttons.has(category):
 		_set_build_mode_for_category(category)
 
@@ -476,7 +485,7 @@ func _reset_game() -> void:
 	_base_upgrade_in_progress = false
 	_game_over = false
 	_game_over_panel.visible = false
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	_economy.set_base_upgrade_in_progress(false)
 	_enemy_timer.start()
 	queue_redraw()
@@ -493,7 +502,7 @@ func _reset_for_play() -> void:
 	_set_upgrade_modal_visible(false)
 	if _economy != null:
 		_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
-		_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+		_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 		_economy.set_base_upgrade_in_progress(false)
 	if _enemy_timer != null:
 		_enemy_timer.start()
@@ -555,7 +564,7 @@ func _update_base_label() -> void:
 	if _base_label != null:
 		_base_label.text = _base_label_text()
 	_update_upgrade_button_text()
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
 	_update_base_upgrade_indicator()
 	_economy.set_archery_level(_archery_range_level)
@@ -739,7 +748,7 @@ func _finish_base_upgrade() -> void:
 	_base_upgrade_in_progress = false
 	_update_base_label()
 	_update_enemy_spawn_rate()
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	_economy.set_base_upgrade_in_progress(false)
 	_update_base_upgrade_indicator()
 	_economy.set_archery_level(_archery_range_level)
@@ -1025,6 +1034,14 @@ func _register_archery_range(range: Node2D) -> void:
 	if _economy != null:
 		_economy.set_archery_level(_archery_range_level)
 	_update_archery_range_indicators()
+
+func _register_barracks(barracks: Node2D) -> void:
+	if barracks == null:
+		return
+	_barracks_level = max(_barracks_level, 1)
+	if _economy != null:
+		_economy.set_barracks_level(_barracks_level)
+		_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 
 func _is_over_player_base(world_pos: Vector2) -> bool:
 	if _base_end == null:
@@ -1712,6 +1729,9 @@ func _clear_buildings() -> void:
 	_archery_range_level = 0
 	if _economy != null:
 		_economy.set_archery_level(_archery_range_level)
+	_barracks_level = 0
+	if _economy != null:
+		_economy.set_barracks_level(_barracks_level)
 
 func _clear_grunt_towers() -> void:
 	for node in get_tree().get_nodes_in_group("grunt_towers"):
