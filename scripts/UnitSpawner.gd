@@ -27,8 +27,10 @@ func spawn_unit(unit_id: String, unit_def: Dictionary) -> void:
 	unit.path_points = main._get_path_points_reversed()
 	unit.reached_goal.connect(main._on_unit_reached_goal.bind(unit))
 	if unit.has_signal("died"):
-		unit.died.connect(main._on_unit_removed.bind(unit))
+		unit.died.connect(main._on_unit_removed.bind(unit, unit_id))
 	main.add_child(unit)
+	if main._performance_tracker != null and main._performance_tracker.is_tracking():
+		main._performance_tracker.record_unit_spawned(unit_id)
 
 func _is_unlocked(unit_def: Dictionary) -> bool:
 	var requirements: Array = unit_def.get("requirements", [])

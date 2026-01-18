@@ -6,6 +6,10 @@ class_name Base
 @export var max_hp := 25
 var _hp := 0
 var _dead := false
+
+var hp: int:
+	get:
+		return _hp
 var _show_upgrade_indicator := false
 var _can_upgrade := false
 

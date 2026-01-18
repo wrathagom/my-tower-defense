@@ -92,6 +92,46 @@ func build(main: Node) -> void:
 
 	main._upgrade_button = null
 
+	# Stats Panel (left side, below the existing panel)
+	main._stats_panel = PanelContainer.new()
+	main._stats_panel.position = Vector2(16, 200)
+	main._stats_panel.size = Vector2(220, 220)
+	main._hud_root.add_child(main._stats_panel)
+
+	var stats_vbox: VBoxContainer = VBoxContainer.new()
+	stats_vbox.add_theme_constant_override("separation", 4)
+	main._stats_panel.add_child(stats_vbox)
+
+	main._stats_base_level_label = Label.new()
+	main._stats_base_level_label.text = "Base Level: 1"
+	stats_vbox.add_child(main._stats_base_level_label)
+
+	main._stats_timer_label = Label.new()
+	main._stats_timer_label.text = "Time: 0:00"
+	stats_vbox.add_child(main._stats_timer_label)
+
+	var stats_separator1: HSeparator = HSeparator.new()
+	stats_vbox.add_child(stats_separator1)
+
+	main._stats_units_label = Label.new()
+	main._stats_units_label.text = "Units: 0 alive / 0 spawned"
+	stats_vbox.add_child(main._stats_units_label)
+
+	main._stats_enemies_label = Label.new()
+	main._stats_enemies_label.text = "Enemies Killed: 0"
+	stats_vbox.add_child(main._stats_enemies_label)
+
+	var stats_separator2: HSeparator = HSeparator.new()
+	stats_vbox.add_child(stats_separator2)
+
+	var stars_header: Label = Label.new()
+	stars_header.text = "Star Progress:"
+	stats_vbox.add_child(stars_header)
+
+	main._stats_stars_box = VBoxContainer.new()
+	main._stats_stars_box.add_theme_constant_override("separation", 2)
+	stats_vbox.add_child(main._stats_stars_box)
+
 	main._game_over_panel = PanelContainer.new()
 	main._game_over_panel.visible = false
 	main._game_over_panel.size = Vector2(360, 160)
@@ -451,9 +491,17 @@ func build(main: Node) -> void:
 	var LevelSelectScript: Script = load("res://scripts/ui/LevelSelectUI.gd")
 	main._level_select_ui = LevelSelectScript.new()
 	main._level_select_ui.visible = false
-	main._level_select_ui.level_selected.connect(main._on_level_selected)
+	main._level_select_ui.level_preview_requested.connect(main._on_level_preview_requested)
 	main._level_select_ui.back_pressed.connect(main._on_level_select_back)
 	main._ui_layer.add_child(main._level_select_ui)
+
+	# Level Launch UI (pre-level screen with lore)
+	var LevelLaunchScript: Script = load("res://scripts/ui/LevelLaunchUI.gd")
+	main._level_launch_ui = LevelLaunchScript.new()
+	main._level_launch_ui.visible = false
+	main._level_launch_ui.play_pressed.connect(main._on_level_selected)
+	main._level_launch_ui.back_pressed.connect(main._on_level_launch_back)
+	main._ui_layer.add_child(main._level_launch_ui)
 
 	# Level Complete UI
 	var LevelCompleteScript: Script = load("res://scripts/ui/LevelCompleteUI.gd")

@@ -2,6 +2,7 @@ extends Control
 class_name LevelSelectUI
 
 signal level_selected(level_id: String, difficulty: String)
+signal level_preview_requested(level_id: String, difficulty: String)
 signal back_pressed()
 
 var _level_list: VBoxContainer
@@ -12,6 +13,8 @@ var _stars_label: Label
 var _difficulty_buttons: Dictionary = {}
 var _selected_level_id: String = ""
 var _back_button: Button
+var _reset_button: Button
+var _confirm_panel: PanelContainer
 
 func _ready() -> void:
 	_build_ui()
@@ -97,11 +100,65 @@ func _build_ui() -> void:
 		_difficulty_box.add_child(button)
 		_difficulty_buttons[diff] = button
 
-	# Back button
+	# Bottom button row
+	var bottom_row := HBoxContainer.new()
+	bottom_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	bottom_row.add_theme_constant_override("separation", 16)
+	main_box.add_child(bottom_row)
+
 	_back_button = Button.new()
 	_back_button.text = "Back"
 	_back_button.pressed.connect(_on_back_pressed)
-	main_box.add_child(_back_button)
+	bottom_row.add_child(_back_button)
+
+	_reset_button = Button.new()
+	_reset_button.text = "Reset Campaign"
+	_reset_button.pressed.connect(_on_reset_pressed)
+	bottom_row.add_child(_reset_button)
+
+	# Confirmation dialog
+	_confirm_panel = PanelContainer.new()
+	_confirm_panel.visible = false
+	_confirm_panel.anchor_left = 0.5
+	_confirm_panel.anchor_right = 0.5
+	_confirm_panel.anchor_top = 0.5
+	_confirm_panel.anchor_bottom = 0.5
+	_confirm_panel.offset_left = -180
+	_confirm_panel.offset_right = 180
+	_confirm_panel.offset_top = -80
+	_confirm_panel.offset_bottom = 80
+	add_child(_confirm_panel)
+
+	var confirm_box := VBoxContainer.new()
+	confirm_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	confirm_box.add_theme_constant_override("separation", 12)
+	_confirm_panel.add_child(confirm_box)
+
+	var confirm_label := Label.new()
+	confirm_label.text = "Reset all campaign progress?"
+	confirm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	confirm_box.add_child(confirm_label)
+
+	var confirm_warning := Label.new()
+	confirm_warning.text = "This cannot be undone!"
+	confirm_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	confirm_warning.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+	confirm_box.add_child(confirm_warning)
+
+	var confirm_buttons := HBoxContainer.new()
+	confirm_buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	confirm_buttons.add_theme_constant_override("separation", 16)
+	confirm_box.add_child(confirm_buttons)
+
+	var cancel_button := Button.new()
+	cancel_button.text = "Cancel"
+	cancel_button.pressed.connect(_on_reset_cancel)
+	confirm_buttons.add_child(cancel_button)
+
+	var confirm_button := Button.new()
+	confirm_button.text = "Reset"
+	confirm_button.pressed.connect(_on_reset_confirm)
+	confirm_buttons.add_child(confirm_button)
 
 func _refresh_levels() -> void:
 	for child in _level_list.get_children():
@@ -158,7 +215,7 @@ func _update_difficulty_buttons() -> void:
 func _on_difficulty_selected(difficulty: String) -> void:
 	if _selected_level_id == "" or not CampaignManager.is_difficulty_unlocked(_selected_level_id, difficulty):
 		return
-	level_selected.emit(_selected_level_id, difficulty)
+	level_preview_requested.emit(_selected_level_id, difficulty)
 
 func _on_back_pressed() -> void:
 	back_pressed.emit()
@@ -171,3 +228,17 @@ func show_ui() -> void:
 
 func hide_ui() -> void:
 	visible = false
+	_confirm_panel.visible = false
+
+func _on_reset_pressed() -> void:
+	_confirm_panel.visible = true
+
+func _on_reset_cancel() -> void:
+	_confirm_panel.visible = false
+
+func _on_reset_confirm() -> void:
+	_confirm_panel.visible = false
+	CampaignManager.reset_progress()
+	_refresh_levels()
+	_difficulty_panel.visible = false
+	_selected_level_id = ""

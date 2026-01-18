@@ -126,6 +126,10 @@ func get_enemy_damage_multiplier(level_id: String, difficulty: String) -> float:
 	var config := get_difficulty_config(level_id, difficulty)
 	return float(config.get("enemy_damage_multiplier", 1.0))
 
+func get_enemy_base_hp_multiplier(level_id: String, difficulty: String) -> float:
+	var config := get_difficulty_config(level_id, difficulty)
+	return float(config.get("enemy_base_hp_multiplier", 1.0))
+
 func get_starting_resources(level_id: String, difficulty: String) -> Dictionary:
 	var config := get_difficulty_config(level_id, difficulty)
 	return config.get("starting_resources", {"wood": 20, "food": 0, "stone": 0, "iron": 0})

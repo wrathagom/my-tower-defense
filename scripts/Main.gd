@@ -145,8 +145,15 @@ var _editor_active := false
 var _performance_tracker: Node
 var _level_complete_ui: Node
 var _level_select_ui: Node
+var _level_launch_ui: Node
 var _splash_campaign_button: Button
 var _splash_sandbox_button: Button
+var _stats_panel: PanelContainer
+var _stats_base_level_label: Label
+var _stats_timer_label: Label
+var _stats_units_label: Label
+var _stats_enemies_label: Label
+var _stats_stars_box: VBoxContainer
 
 # Fog of War
 var _fog_revealed_column: int = -1  # Leftmost revealed column (lower = more revealed)
@@ -208,6 +215,7 @@ func _process(_delta: float) -> void:
 	if _base_end != null and not _game_state_manager.is_game_over():
 		_update_base_upgrade_indicator()
 	_update_archery_range_indicators()
+	_update_stats_panel()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _game_state_manager.is_splash_active():
@@ -498,8 +506,8 @@ func set_path_cells(cells: Array[Vector2i]) -> void:
 	queue_redraw()
 
 func _reset_game() -> void:
-	for node in get_tree().get_nodes_in_group("construction"):
-		node.queue_free()
+	_clear_constructions()
+	_clear_buildings()
 	_clear_enemy_towers()
 	_generate_random_path()
 	_rebuild_path()
@@ -513,6 +521,11 @@ func _reset_game() -> void:
 	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 	_economy.set_base_upgrade_in_progress(false)
 	_enemy_timer.start()
+
+	# Start performance tracking
+	if _performance_tracker != null:
+		_performance_tracker.start_tracking()
+
 	queue_redraw()
 
 func _reset_for_play() -> void:
@@ -763,6 +776,98 @@ func _update_archery_range_indicators() -> void:
 func _update_base_upgrade_indicator() -> void:
 	_upgrade_manager.update_base_upgrade_indicator()
 
+func _update_stats_panel() -> void:
+	if _stats_panel == null:
+		return
+
+	# Update base level
+	if _stats_base_level_label != null and _upgrade_manager != null:
+		_stats_base_level_label.text = "Base Level: %d" % _upgrade_manager.base_level
+
+	# Update timer
+	if _stats_timer_label != null and _performance_tracker != null:
+		var elapsed: float = _performance_tracker.get_elapsed_time()
+		var minutes: int = int(elapsed) / 60
+		var seconds: int = int(elapsed) % 60
+		_stats_timer_label.text = "Time: %d:%02d" % [minutes, seconds]
+
+	# Update units stats
+	if _stats_units_label != null and _performance_tracker != null:
+		var alive: int = _performance_tracker.get_units_alive()
+		var spawned: int = _performance_tracker.get_units_spawned()
+		var lost: int = _performance_tracker.get_units_lost()
+		_stats_units_label.text = "Units: %d alive / %d spawned (%d lost)" % [alive, spawned, lost]
+
+	# Update enemies killed
+	if _stats_enemies_label != null and _performance_tracker != null:
+		_stats_enemies_label.text = "Enemies Killed: %d" % _performance_tracker.get_enemies_killed()
+
+	# Update star progress (campaign mode only)
+	if _stats_stars_box != null:
+		_update_star_progress()
+
+func _update_star_progress() -> void:
+	if _stats_stars_box == null:
+		return
+
+	# Clear existing labels
+	for child in _stats_stars_box.get_children():
+		child.queue_free()
+
+	# Only show in campaign mode
+	if not CampaignManager.is_campaign_mode or CampaignManager.current_level_id == "":
+		var hidden_label := Label.new()
+		hidden_label.text = "(Campaign mode only)"
+		hidden_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		_stats_stars_box.add_child(hidden_label)
+		return
+
+	var thresholds := CampaignManager.get_star_thresholds(CampaignManager.current_level_id, CampaignManager.current_difficulty)
+	if thresholds.is_empty():
+		return
+
+	# Time threshold
+	var time_threshold: float = thresholds.get("time", 999999.0)
+	var current_time: float = _performance_tracker.get_elapsed_time() if _performance_tracker != null else 0.0
+	var time_ok := current_time <= time_threshold
+	var time_label := Label.new()
+	time_label.text = "%s Time: < %dm (%d:%02d)" % [
+		"✓" if time_ok else "✗",
+		int(time_threshold) / 60,
+		int(current_time) / 60,
+		int(current_time) % 60
+	]
+	time_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3) if time_ok else Color(0.9, 0.3, 0.3))
+	_stats_stars_box.add_child(time_label)
+
+	# Base HP threshold
+	var hp_percent_threshold: float = thresholds.get("base_hp_percent", 0.0)
+	var current_hp_percent: float = 0.0
+	if _base_end != null and _base_end.max_hp > 0:
+		current_hp_percent = (float(_base_end.hp) / float(_base_end.max_hp)) * 100.0
+	var hp_ok := current_hp_percent >= hp_percent_threshold
+	var hp_label := Label.new()
+	hp_label.text = "%s Base HP: > %d%% (%d%%)" % [
+		"✓" if hp_ok else "✗",
+		int(hp_percent_threshold),
+		int(current_hp_percent)
+	]
+	hp_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3) if hp_ok else Color(0.9, 0.3, 0.3))
+	_stats_stars_box.add_child(hp_label)
+
+	# Units lost threshold
+	var units_lost_threshold: int = thresholds.get("units_lost", 999999)
+	var current_units_lost: int = _performance_tracker.get_units_lost() if _performance_tracker != null else 0
+	var units_ok := current_units_lost <= units_lost_threshold
+	var units_label := Label.new()
+	units_label.text = "%s Units Lost: < %d (%d)" % [
+		"✓" if units_ok else "✗",
+		units_lost_threshold,
+		current_units_lost
+	]
+	units_label.add_theme_color_override("font_color", Color(0.3, 0.9, 0.3) if units_ok else Color(0.9, 0.3, 0.3))
+	_stats_stars_box.add_child(units_label)
+
 func _register_archery_range(range: Node2D) -> void:
 	_upgrade_manager.register_archery_range(range)
 
@@ -834,13 +939,19 @@ func _spawn_enemy() -> void:
 	if not _path_valid:
 		return
 	var enemy: Node2D = preload("res://scenes/Enemy.tscn").instantiate() as Node2D
+	enemy.visible = false  # Hide until fog visibility is updated next frame
 	enemy.path_points = _get_path_points()
 	# Apply campaign multipliers
 	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
 		enemy.hp_multiplier = CampaignManager.get_enemy_hp_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
 		enemy.damage_multiplier = CampaignManager.get_enemy_damage_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
 	enemy.reached_goal.connect(_on_enemy_reached_goal.bind(enemy))
+	enemy.died.connect(_on_enemy_died)
 	add_child(enemy)
+
+func _on_enemy_died() -> void:
+	if _performance_tracker != null and _performance_tracker.is_tracking():
+		_performance_tracker.record_enemy_killed()
 
 func _on_enemy_reached_goal(enemy: Node2D) -> void:
 	if _base_end != null:
@@ -851,14 +962,14 @@ func _on_enemy_reached_goal(enemy: Node2D) -> void:
 func _on_unit_reached_goal(unit: Node2D) -> void:
 	if _base_start != null:
 		_base_start.take_damage(1)
-	_on_unit_removed(unit)
+	_on_unit_removed(unit, "")
 
-func _on_unit_removed(unit: Node2D) -> void:
+func _on_unit_removed(unit: Node2D, unit_id: String = "") -> void:
 	if unit != null and is_instance_valid(unit):
 		unit.queue_free()
 	_economy.on_unit_removed()
 	if _performance_tracker != null and _performance_tracker.is_tracking():
-		_performance_tracker.record_unit_lost()
+		_performance_tracker.record_unit_lost(unit_id)
 
 func _on_base_died(is_player_base: bool) -> void:
 	_game_state_manager.on_game_over(is_player_base)
@@ -870,6 +981,10 @@ func _handle_level_end(is_player_base: bool) -> void:
 
 	if not CampaignManager.is_campaign_mode:
 		return
+
+	# In campaign mode, always hide the fallback game over panel
+	if _game_over_panel != null:
+		_game_over_panel.visible = false
 
 	var victory: bool = not is_player_base
 	var base_hp: int = 0
@@ -888,10 +1003,11 @@ func _handle_level_end(is_player_base: bool) -> void:
 
 	CampaignManager.record_level_completion(result)
 
-	# Show level complete UI if available
+	# Show level complete UI
 	if _level_complete_ui != null and _level_complete_ui.has_method("show_result"):
 		_level_complete_ui.call("show_result", result)
-		_game_over_panel.visible = false
+	else:
+		push_error("LevelCompleteUI not available or missing show_result method")
 
 func _on_restart_pressed() -> void:
 	get_tree().reload_current_scene.call_deferred()
@@ -926,10 +1042,24 @@ func _on_campaign_pressed() -> void:
 		if _level_select_ui.has_method("show_ui"):
 			_level_select_ui.call("show_ui")
 
+func _on_level_preview_requested(level_id: String, difficulty: String) -> void:
+	if _level_select_ui != null:
+		_level_select_ui.visible = false
+	if _level_launch_ui != null and _level_launch_ui.has_method("show_level"):
+		_level_launch_ui.call("show_level", level_id, difficulty)
+
+func _on_level_launch_back() -> void:
+	if _level_launch_ui != null:
+		_level_launch_ui.visible = false
+	if _level_select_ui != null:
+		_level_select_ui.visible = true
+
 func _on_level_selected(level_id: String, difficulty: String) -> void:
 	CampaignManager.start_campaign_level(level_id, difficulty)
 	if _level_select_ui != null:
 		_level_select_ui.visible = false
+	if _level_launch_ui != null:
+		_level_launch_ui.visible = false
 
 	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
@@ -1399,7 +1529,11 @@ func _update_bases() -> void:
 	if _base_start == null:
 		_base_start = preload("res://scenes/Base.tscn").instantiate() as Base
 		add_child(_base_start)
-	_base_start.max_hp = 500
+	var enemy_base_hp := 500
+	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
+		var multiplier := CampaignManager.get_enemy_base_hp_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
+		enemy_base_hp = int(500.0 * multiplier)
+	_base_start.max_hp = enemy_base_hp
 	_base_start.reset_hp()
 	_base_start.size = cell_size * 3
 	_base_start.position = _cell_to_world(start_cell)

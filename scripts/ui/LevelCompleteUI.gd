@@ -107,13 +107,13 @@ func show_result(result: RefCounted) -> void:
 	_next_button.visible = result.victory and next_level != ""
 
 func _get_star_display(stars: int) -> String:
-	var filled := ""
-	var empty := ""
-	for i in range(stars):
-		filled += "*"
-	for i in range(3 - stars):
-		empty += "-"
-	return "Stars: %s%s (%d/3)" % [filled, empty, stars]
+	var display := ""
+	for i in range(3):
+		if i < stars:
+			display += "★"
+		else:
+			display += "☆"
+	return "%s (%d/3)" % [display, stars]
 
 func hide_ui() -> void:
 	visible = false
