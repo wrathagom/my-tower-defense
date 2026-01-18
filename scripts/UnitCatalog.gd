@@ -1,6 +1,8 @@
 extends Node
 class_name UnitCatalog
 
+const GameConfig = preload("res://scripts/GameConfig.gd")
+
 const ORDER := ["grunt", "stone_thrower", "archer", "swordsman"]
 
 func get_order() -> Array[String]:
@@ -9,12 +11,12 @@ func get_order() -> Array[String]:
 		order.append(unit_id)
 	return order
 
-func build_defs(main: Node) -> Dictionary:
+func build_defs(config: GameConfig) -> Dictionary:
 	return {
 		"grunt": {
 			"label": "Grunt",
 			"scene": "res://scenes/Grunt.tscn",
-			"food_cost": main.unit_food_cost,
+			"food_cost": config.unit_food_cost,
 			"wood_cost": 0,
 			"stone_cost": 0,
 			"requirements": [{"type": "base_level", "value": 1}],
@@ -22,9 +24,9 @@ func build_defs(main: Node) -> Dictionary:
 		"stone_thrower": {
 			"label": "Stone Thrower",
 			"scene": "res://scenes/StoneThrower.tscn",
-			"food_cost": main.stone_thrower_food_cost,
+			"food_cost": config.stone_thrower_food_cost,
 			"wood_cost": 0,
-			"stone_cost": main.stone_thrower_stone_cost,
+			"stone_cost": config.stone_thrower_stone_cost,
 			"requirements": [
 				{"type": "base_level", "value": 2},
 				{"type": "archery_level", "value": 1},
@@ -33,8 +35,8 @@ func build_defs(main: Node) -> Dictionary:
 		"archer": {
 			"label": "Archer",
 			"scene": "res://scenes/Archer.tscn",
-			"food_cost": main.archer_food_cost,
-			"wood_cost": main.archer_wood_cost,
+			"food_cost": config.archer_food_cost,
+			"wood_cost": config.archer_wood_cost,
 			"stone_cost": 0,
 			"requirements": [
 				{"type": "base_level", "value": 1},
@@ -44,10 +46,10 @@ func build_defs(main: Node) -> Dictionary:
 		"swordsman": {
 			"label": "Swordsman",
 			"scene": "res://scenes/Swordsman.tscn",
-			"food_cost": main.swordsman_food_cost,
+			"food_cost": config.swordsman_food_cost,
 			"wood_cost": 0,
 			"stone_cost": 0,
-			"iron_cost": main.swordsman_iron_cost,
+			"iron_cost": config.swordsman_iron_cost,
 			"requirements": [
 				{"type": "base_level", "value": 3},
 				{"type": "barracks_level", "value": 1},

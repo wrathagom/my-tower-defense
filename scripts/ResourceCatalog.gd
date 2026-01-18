@@ -1,6 +1,8 @@
 extends Node
 class_name ResourceCatalog
 
+const GameConfig = preload("res://scripts/GameConfig.gd")
+
 const ORDER := ["tree", "stone", "iron"]
 
 func get_order() -> Array[String]:
@@ -9,21 +11,21 @@ func get_order() -> Array[String]:
 		order.append(resource_id)
 	return order
 
-func build_defs(main: Node) -> Dictionary:
+func build_defs(config: GameConfig) -> Dictionary:
 	return {
 		"tree": {
 			"label": "Tree",
 			"scene": "res://scenes/Tree.tscn",
-			"count": main.tree_count,
+			"count": config.tree_count,
 			"map_key": "trees",
 			"size": 2,
 			"ensure_zone": "player_zone",
-			"validation_rightmost": main.player_zone_width,
+			"validation_rightmost": config.player_zone_width,
 		},
 		"stone": {
 			"label": "Stone",
 			"scene": "res://scenes/Stone.tscn",
-			"count": main.stone_count,
+			"count": config.stone_count,
 			"map_key": "stones",
 			"size": 2,
 			"ensure_zone": "stone_band",
@@ -32,7 +34,7 @@ func build_defs(main: Node) -> Dictionary:
 		"iron": {
 			"label": "Iron",
 			"scene": "res://scenes/Iron.tscn",
-			"count": main.iron_count,
+			"count": config.iron_count,
 			"map_key": "irons",
 			"size": 2,
 			"ensure_zone": "",

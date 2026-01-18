@@ -1,5 +1,7 @@
 extends SceneTree
 
+const GameConfig = preload("res://scripts/GameConfig.gd")
+
 func _init() -> void:
 	var failed := 0
 	if not _test_path_valid():
@@ -28,9 +30,10 @@ func _init() -> void:
 func _test_path_valid() -> bool:
 	var MainScript: Script = preload("res://scripts/Main.gd")
 	var main: Node = MainScript.new()
-	main.grid_width = 5
-	main.grid_height = 3
-	main.path_margin = 0
+	main.config = GameConfig.new()
+	main.config.grid_width = 5
+	main.config.grid_height = 3
+	main.config.path_margin = 0
 	var cells: Array[Vector2i] = []
 	cells.append(Vector2i(0, 1))
 	cells.append(Vector2i(1, 1))
@@ -53,9 +56,10 @@ func _test_path_valid() -> bool:
 func _test_path_invalid() -> bool:
 	var MainScript: Script = preload("res://scripts/Main.gd")
 	var main: Node = MainScript.new()
-	main.grid_width = 5
-	main.grid_height = 3
-	main.path_margin = 0
+	main.config = GameConfig.new()
+	main.config.grid_width = 5
+	main.config.grid_height = 3
+	main.config.path_margin = 0
 	var cells: Array[Vector2i] = []
 	cells.append(Vector2i(0, 1))
 	cells.append(Vector2i(2, 1))
@@ -122,8 +126,9 @@ func _test_unit_catalog() -> bool:
 	var UnitCatalogScript: Script = preload("res://scripts/UnitCatalog.gd")
 	var MainScript: Script = preload("res://scripts/Main.gd")
 	var main: Node = MainScript.new()
+	main.config = GameConfig.new()
 	var catalog: Node = UnitCatalogScript.new()
-	var defs: Dictionary = catalog.build_defs(main)
+	var defs: Dictionary = catalog.build_defs(main.config)
 	var order: Array[String] = catalog.get_order()
 	if order.is_empty():
 		main.free()
@@ -147,8 +152,9 @@ func _test_building_catalog() -> bool:
 	var BuildingCatalogScript: Script = preload("res://scripts/BuildingCatalog.gd")
 	var MainScript: Script = preload("res://scripts/Main.gd")
 	var main: Node = MainScript.new()
+	main.config = GameConfig.new()
 	var catalog: Node = BuildingCatalogScript.new()
-	var defs: Dictionary = catalog.build_defs(main)
+	var defs: Dictionary = catalog.build_defs(main.config)
 	var order: Array[String] = catalog.get_order()
 	if order.is_empty():
 		main.free()
@@ -172,8 +178,9 @@ func _test_resource_catalog() -> bool:
 	var ResourceCatalogScript: Script = preload("res://scripts/ResourceCatalog.gd")
 	var MainScript: Script = preload("res://scripts/Main.gd")
 	var main: Node = MainScript.new()
+	main.config = GameConfig.new()
 	var catalog: Node = ResourceCatalogScript.new()
-	var defs: Dictionary = catalog.build_defs(main)
+	var defs: Dictionary = catalog.build_defs(main.config)
 	var order: Array[String] = catalog.get_order()
 	if order.is_empty():
 		main.free()

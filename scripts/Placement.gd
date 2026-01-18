@@ -25,7 +25,7 @@ func handle_build_click(world_pos: Vector2, mode: String) -> bool:
 	return _try_build_grid(def, world_pos)
 
 func update_hover(world_pos: Vector2, mode: String) -> void:
-	var cell := Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
+	var cell := Vector2i(int(world_pos.x / main.config.cell_size), int(world_pos.y / main.config.cell_size))
 	if not main._is_in_bounds(cell):
 		if hover_cell != Vector2i(-1, -1):
 			hover_cell = Vector2i(-1, -1)
@@ -87,7 +87,7 @@ func _draw_resource_hover(drawer: Node2D) -> void:
 	for x in range(hover_resource_size):
 		for y in range(hover_resource_size):
 			var cell := hover_resource_top_left + Vector2i(x, y)
-			var rect := Rect2(cell.x * main.cell_size, cell.y * main.cell_size, main.cell_size, main.cell_size)
+			var rect := Rect2(cell.x * main.config.cell_size, cell.y * main.config.cell_size, main.config.cell_size, main.config.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
@@ -108,12 +108,12 @@ func _draw_building_hover(drawer: Node2D) -> void:
 	for x in range(hover_build_size):
 		for y in range(hover_build_size):
 			var cell := hover_build_top_left + Vector2i(x, y)
-			var rect := Rect2(cell.x * main.cell_size, cell.y * main.cell_size, main.cell_size, main.cell_size)
+			var rect := Rect2(cell.x * main.config.cell_size, cell.y * main.config.cell_size, main.config.cell_size, main.config.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
 func _try_build_grid(def: Dictionary, world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
+	var cell: Vector2i = Vector2i(int(world_pos.x / main.config.cell_size), int(world_pos.y / main.config.cell_size))
 	var size: int = int(def.get("size", 1))
 	if not _can_place_structure(cell, size):
 		return false
@@ -135,7 +135,7 @@ func _try_build_grid(def: Dictionary, world_pos: Vector2) -> bool:
 	return true
 
 func _try_build_resource(def: Dictionary, world_pos: Vector2) -> bool:
-	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
+	var cell: Vector2i = Vector2i(int(world_pos.x / main.config.cell_size), int(world_pos.y / main.config.cell_size))
 	var placement: String = str(def.get("placement", ""))
 	var resource_map: Dictionary = main._resource_map(placement)
 	if not resource_map.has(cell):
@@ -168,7 +168,7 @@ func _finish_grid_building(construction: Node2D, def: Dictionary, top_left: Vect
 		var script: Script = load(path)
 		building = script.new() as Node2D
 		building.set("cell", top_left)
-		building.set("cell_size", main.cell_size)
+		building.set("cell_size", main.config.cell_size)
 		main.add_child(building)
 	else:
 		building = _place_structure(path, top_left, size)
@@ -182,8 +182,8 @@ func _finish_resource_building(_construction: Node2D, def: Dictionary, resource:
 		return
 	var path: String = str(def.get("path", ""))
 	var cutter: Node2D = load(path).instantiate() as Node2D
-	cutter.cell_size = main.cell_size
-	cutter.position = Vector2(main.cell_size, main.cell_size)
+	cutter.cell_size = main.config.cell_size
+	cutter.position = Vector2(main.config.cell_size, main.config.cell_size)
 	var kind: String = str(def.get("resource_kind", ""))
 	if kind == "wood":
 		cutter.wood_produced.connect(_on_wood_produced)
@@ -199,18 +199,18 @@ func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
 		return
 	var effect: String = str(def.get("effect", ""))
 	if effect == "house":
-		economy.add_unit_capacity(main.house_capacity)
+		economy.add_unit_capacity(main.config.house_capacity)
 	elif effect == "farm":
 		if building.has_signal("food_produced"):
 			building.food_produced.connect(_on_food_produced)
 	elif effect == "wood_storage":
-		economy.add_wood_cap(main.storage_capacity)
+		economy.add_wood_cap(main.config.storage_capacity)
 	elif effect == "food_storage":
-		economy.add_food_cap(main.storage_capacity)
+		economy.add_food_cap(main.config.storage_capacity)
 	elif effect == "stone_storage":
-		economy.add_stone_cap(main.storage_capacity)
+		economy.add_stone_cap(main.config.storage_capacity)
 	elif effect == "iron_storage":
-		economy.add_iron_cap(main.storage_capacity)
+		economy.add_iron_cap(main.config.storage_capacity)
 	elif effect == "archery_range":
 		main._upgrade_manager.archery_range_level = max(main._upgrade_manager.archery_range_level, 1)
 		main._register_archery_range(building)
@@ -221,7 +221,7 @@ func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
 func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node2D:
 	var building: Node2D = load(scene_path).instantiate() as Node2D
 	building.set("cell", top_left)
-	building.set("cell_size", main.cell_size)
+	building.set("cell_size", main.config.cell_size)
 	main.add_child(building)
 	for x in range(size):
 		for y in range(size):
@@ -232,17 +232,17 @@ func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node
 func _start_construction(top_left: Vector2i, size: int, duration: float) -> Node2D:
 	var ConstructionScript: Script = load("res://scripts/Construction.gd")
 	var construction: Node2D = ConstructionScript.new()
-	construction.cell_size = main.cell_size
+	construction.cell_size = main.config.cell_size
 	construction.size_cells = size
 	construction.duration = duration
-	construction.position = Vector2(top_left.x * main.cell_size, top_left.y * main.cell_size)
+	construction.position = Vector2(top_left.x * main.config.cell_size, top_left.y * main.config.cell_size)
 	main.add_child(construction)
 	return construction
 
 func _finish_tower(construction: Node2D, cell: Vector2i) -> void:
 	var tower := preload("res://scripts/Tower.gd").new()
 	tower.cell = cell
-	tower.cell_size = main.cell_size
+	tower.cell_size = main.config.cell_size
 	main.add_child(tower)
 	if main._occupied.get(cell) == construction:
 		main._occupied[cell] = tower

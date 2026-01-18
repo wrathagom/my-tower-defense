@@ -59,7 +59,7 @@ func _spawn_resource(resource_id: String) -> void:
 	var size: int = int(def.get("size", 2))
 	if count <= 0:
 		return
-	if main.grid_width < size or main.grid_height < size:
+	if main.config.grid_width < size or main.config.grid_height < size:
 		return
 	_seed_rng(resource_id)
 	var ensure_zone: String = str(def.get("ensure_zone", ""))
@@ -108,14 +108,14 @@ func _remove_resource(resource_id: String, node: Node2D) -> bool:
 func _pick_cell(def: Dictionary, require_zone: bool) -> Vector2i:
 	var size: int = int(def.get("size", 2))
 	var min_x: int = 0
-	var max_x: int = main.grid_width - size
+	var max_x: int = main.config.grid_width - size
 	var min_y: int = 0
-	var max_y: int = main.grid_height - size
+	var max_y: int = main.config.grid_height - size
 	if require_zone:
 		var zone: String = str(def.get("ensure_zone", ""))
 		if zone == "player_zone":
-			min_x = max(main.grid_width - main.player_zone_width, 0)
-			max_x = max(main.grid_width - size, 0)
+			min_x = max(main.config.grid_width - main.config.player_zone_width, 0)
+			max_x = max(main.config.grid_width - size, 0)
 		elif zone == "stone_band":
 			var band: Vector2i = main._stone_band_bounds()
 			min_x = band.x
@@ -138,7 +138,7 @@ func _place_resource(resource_id: String, top_left: Vector2i) -> bool:
 		return false
 	var node: Node2D = load(scene_path).instantiate() as Node2D
 	node.set("cell", top_left)
-	node.set("cell_size", main.cell_size)
+	node.set("cell_size", main.config.cell_size)
 	main.add_child(node)
 	var nodes: Array = main._resource_nodes(resource_id)
 	nodes.append(node)
@@ -173,7 +173,7 @@ func _ensure_resource_in_zone(resource_id: String, def: Dictionary) -> void:
 	var max_x: int = bounds.y
 	if max_x < min_x:
 		return
-	var max_y: int = main.grid_height - size
+	var max_y: int = main.config.grid_height - size
 	for y in range(max_y + 1):
 		for x in range(min_x, max_x + 1):
 			if _place_resource(resource_id, Vector2i(x, y)):
@@ -181,10 +181,10 @@ func _ensure_resource_in_zone(resource_id: String, def: Dictionary) -> void:
 
 func _zone_bounds(zone: String, size: int) -> Vector2i:
 	var min_x: int = 0
-	var max_x: int = main.grid_width - size
+	var max_x: int = main.config.grid_width - size
 	if zone == "player_zone":
-		min_x = max(main.grid_width - main.player_zone_width, 0)
-		max_x = max(main.grid_width - size, 0)
+		min_x = max(main.config.grid_width - main.config.player_zone_width, 0)
+		max_x = max(main.config.grid_width - size, 0)
 	elif zone == "stone_band":
 		var band: Vector2i = main._stone_band_bounds()
 		min_x = band.x
@@ -199,8 +199,8 @@ func _cell_in_zone(cell: Vector2i, zone: String) -> bool:
 	return true
 
 func _seed_rng(resource_id: String) -> void:
-	if main.random_seed == 0:
+	if main.config.random_seed == 0:
 		rng.randomize()
 	else:
 		var offset: int = abs(resource_id.hash()) % 997
-		rng.seed = main.random_seed + offset
+		rng.seed = main.config.random_seed + offset

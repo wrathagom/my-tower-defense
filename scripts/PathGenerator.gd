@@ -20,15 +20,15 @@ func setup(main_node: Node) -> void:
 func _sync_config() -> void:
 	if _main == null:
 		return
-	grid_width = _main.grid_width
-	grid_height = _main.grid_height
-	path_margin = _main.path_margin
-	path_straightness = _main.path_straightness
-	path_max_vertical_step = _main.path_max_vertical_step
-	path_length_multiplier = _main.path_length_multiplier
-	random_seed = _main.random_seed
-	restrict_path_to_base_band = _main.restrict_path_to_base_band
-	path_generation_attempts = _main.path_generation_attempts
+	grid_width = _main.config.grid_width
+	grid_height = _main.config.grid_height
+	path_margin = _main.config.path_margin
+	path_straightness = _main.config.path_straightness
+	path_max_vertical_step = _main.config.path_max_vertical_step
+	path_length_multiplier = _main.config.path_length_multiplier
+	random_seed = _main.config.random_seed
+	restrict_path_to_base_band = _main.config.restrict_path_to_base_band
+	path_generation_attempts = _main.config.path_generation_attempts
 
 func generate_random_path() -> Dictionary:
 	_sync_config()

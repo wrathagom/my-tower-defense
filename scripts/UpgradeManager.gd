@@ -69,7 +69,7 @@ func update_upgrade_modal() -> void:
 			level_value = int(range.get("level"))
 		_upgrade_modal_title.text = "Upgrade Archery Range"
 		_upgrade_modal_level.text = "Level: %d / %d" % [level_value, 2]
-		_upgrade_modal_cost.text = "Cost: %dW %dS" % [_main.archery_range_upgrade_cost, _main.archery_range_upgrade_stone_cost]
+		_upgrade_modal_cost.text = "Cost: %dW %dS" % [_main.config.archery_range_upgrade_cost, _main.config.archery_range_upgrade_stone_cost]
 		_upgrade_modal_unlocks.text = "Unlocks: Archer, Archer Tower"
 		_upgrade_modal_button.disabled = not can_upgrade_archery(range)
 	else:
@@ -86,9 +86,9 @@ func get_upgrade_modal_target() -> Node2D:
 	return _upgrade_modal_target
 
 func base_max_level() -> int:
-	if _main == null or _main.base_upgrade_times.is_empty():
+	if _main == null or _main.config.base_upgrade_times.is_empty():
 		return 1
-	var max_from_upgrades: int = _main.base_upgrade_times.size() + 1
+	var max_from_upgrades: int = _main.config.base_upgrade_times.size() + 1
 	# Apply campaign cap if in campaign mode
 	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
 		var campaign_cap: int = CampaignManager.get_max_base_level(CampaignManager.current_level_id)
@@ -99,8 +99,8 @@ func base_upgrade_cost_text() -> String:
 	if _main == null:
 		return ""
 	if base_level >= 2:
-		return "%dW %dS" % [_main.base_upgrade_cost, _main.base_upgrade_stone_cost]
-	return "%dW" % _main.base_upgrade_cost
+		return "%dW %dS" % [_main.config.base_upgrade_cost, _main.config.base_upgrade_stone_cost]
+	return "%dW" % _main.config.base_upgrade_cost
 
 func base_upgrade_unlocks() -> String:
 	if base_level == 1:
@@ -118,9 +118,9 @@ func can_upgrade_base() -> bool:
 		return false
 	if base_level >= base_max_level():
 		return false
-	if _economy == null or not _economy.can_afford_wood(_main.base_upgrade_cost):
+	if _economy == null or not _economy.can_afford_wood(_main.config.base_upgrade_cost):
 		return false
-	if base_level >= 2 and _economy.stone < _main.base_upgrade_stone_cost:
+	if base_level >= 2 and _economy.stone < _main.config.base_upgrade_stone_cost:
 		return false
 	return true
 
@@ -131,18 +131,18 @@ func can_upgrade_archery(range: Node2D) -> bool:
 		return false
 	if range.get("upgrade_in_progress") == true:
 		return false
-	if _economy == null or not _economy.can_afford_wood(_main.archery_range_upgrade_cost):
+	if _economy == null or not _economy.can_afford_wood(_main.config.archery_range_upgrade_cost):
 		return false
-	if _economy.stone < _main.archery_range_upgrade_stone_cost:
+	if _economy.stone < _main.config.archery_range_upgrade_stone_cost:
 		return false
 	return true
 
 func try_upgrade_base() -> void:
 	if not can_upgrade_base():
 		return
-	_economy.spend_wood(_main.base_upgrade_cost)
+	_economy.spend_wood(_main.config.base_upgrade_cost)
 	if base_level >= 2:
-		_economy.spend_stone(_main.base_upgrade_stone_cost)
+		_economy.spend_stone(_main.config.base_upgrade_stone_cost)
 	base_upgrade_in_progress = true
 	_economy.set_base_upgrade_in_progress(true)
 	var top_left: Vector2i = _main._base_end_cell + Vector2i(-1, -1)
@@ -151,17 +151,17 @@ func try_upgrade_base() -> void:
 	construction.completed.connect(finish_base_upgrade)
 
 func base_upgrade_duration() -> float:
-	if _main == null or _main.base_upgrade_times.is_empty():
+	if _main == null or _main.config.base_upgrade_times.is_empty():
 		return 0.0
 	var index: int = max(base_level - 1, 0)
-	if index >= _main.base_upgrade_times.size():
-		index = _main.base_upgrade_times.size() - 1
-	return _main.base_upgrade_times[index]
+	if index >= _main.config.base_upgrade_times.size():
+		index = _main.config.base_upgrade_times.size() - 1
+	return _main.config.base_upgrade_times[index]
 
 func finish_base_upgrade() -> void:
 	base_level += 1
-	_main.player_zone_width += _main.zone_upgrade_amount
-	_main._base_end.upgrade(_main.base_hp_upgrade)
+	_main.config.player_zone_width += _main.config.zone_upgrade_amount
+	_main._base_end.upgrade(_main.config.base_hp_upgrade)
 	base_upgrade_in_progress = false
 	_main._update_base_label()
 	_main._update_enemy_spawn_rate()
@@ -174,11 +174,11 @@ func finish_base_upgrade() -> void:
 func try_upgrade_archery_range(range: Node2D) -> void:
 	if not can_upgrade_archery(range):
 		return
-	_economy.spend_wood(_main.archery_range_upgrade_cost)
-	_economy.spend_stone(_main.archery_range_upgrade_stone_cost)
+	_economy.spend_wood(_main.config.archery_range_upgrade_cost)
+	_economy.spend_stone(_main.config.archery_range_upgrade_stone_cost)
 	range.set("upgrade_in_progress", true)
 	var top_left: Vector2i = range.get("cell")
-	var construction = _main._spawn_construction(top_left, 3, _main.archery_range_upgrade_time)
+	var construction = _main._spawn_construction(top_left, 3, _main.config.archery_range_upgrade_time)
 	construction.completed.connect(Callable(self, "finish_archery_range_upgrade").bind(range))
 
 func finish_archery_range_upgrade(range: Node2D) -> void:
@@ -198,7 +198,7 @@ func update_archery_range_indicators() -> void:
 		var show: bool = archery_range_level < 2 and range.get("upgrade_in_progress") != true
 		var can_upgrade: bool = can_upgrade_archery(range)
 		if range.has_method("set_upgrade_indicator"):
-			var cost_text := "%dW %dS" % [_main.archery_range_upgrade_cost, _main.archery_range_upgrade_stone_cost]
+			var cost_text := "%dW %dS" % [_main.config.archery_range_upgrade_cost, _main.config.archery_range_upgrade_stone_cost]
 			range.call("set_upgrade_indicator", show, can_upgrade, cost_text)
 
 func register_archery_range(range: Node2D) -> void:
@@ -233,7 +233,7 @@ func get_archery_range_at(world_pos: Vector2) -> Node2D:
 	for range in archery_ranges:
 		if range == null or not is_instance_valid(range):
 			continue
-		var size: float = _main.cell_size * 3.0
+		var size: float = _main.config.cell_size * 3.0
 		var local := world_pos - range.position
 		if local.x >= 0.0 and local.y >= 0.0 and local.x <= size and local.y <= size:
 			return range

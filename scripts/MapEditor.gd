@@ -133,7 +133,7 @@ func handle_input(event: InputEvent) -> bool:
 	return false
 
 func handle_click(world_pos: Vector2) -> void:
-	var cell := Vector2i(int(world_pos.x / _main.cell_size), int(world_pos.y / _main.cell_size))
+	var cell := Vector2i(int(world_pos.x / _main.config.cell_size), int(world_pos.y / _main.config.cell_size))
 	if not _main._is_in_bounds(cell):
 		return
 	if tool == "path":
@@ -194,7 +194,7 @@ func handle_click(world_pos: Vector2) -> void:
 func handle_drag(world_pos: Vector2) -> void:
 	if tool != "path" and tool != "erase":
 		return
-	var cell := Vector2i(int(world_pos.x / _main.cell_size), int(world_pos.y / _main.cell_size))
+	var cell := Vector2i(int(world_pos.x / _main.config.cell_size), int(world_pos.y / _main.config.cell_size))
 	if cell == last_cell:
 		return
 	last_cell = cell
@@ -281,7 +281,7 @@ func _draw_hover(drawer: Node2D) -> void:
 
 func _mouse_cell() -> Vector2i:
 	var world_pos: Vector2 = _main.get_global_mouse_position()
-	return Vector2i(int(world_pos.x / _main.cell_size), int(world_pos.y / _main.cell_size))
+	return Vector2i(int(world_pos.x / _main.config.cell_size), int(world_pos.y / _main.config.cell_size))
 
 func _draw_square(drawer: Node2D, center: Vector2i, size_cells: int, valid: bool) -> void:
 	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
@@ -291,7 +291,7 @@ func _draw_square(drawer: Node2D, center: Vector2i, size_cells: int, valid: bool
 			var cell := Vector2i(center.x + dx, center.y + dy)
 			if not _main._is_in_bounds(cell):
 				continue
-			var rect := Rect2(cell.x * _main.cell_size, cell.y * _main.cell_size, _main.cell_size, _main.cell_size)
+			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
@@ -302,7 +302,7 @@ func _draw_square_top_left(drawer: Node2D, top_left: Vector2i, size_cells: int, 
 			var cell := Vector2i(top_left.x + dx, top_left.y + dy)
 			if not _main._is_in_bounds(cell):
 				continue
-			var rect := Rect2(cell.x * _main.cell_size, cell.y * _main.cell_size, _main.cell_size, _main.cell_size)
+			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
@@ -312,8 +312,8 @@ func build_map_data() -> Dictionary:
 	if _main.path_cells.is_empty():
 		return {}
 	var data := {
-		"grid_width": _main.grid_width,
-		"grid_height": _main.grid_height,
+		"grid_width": _main.config.grid_width,
+		"grid_height": _main.config.grid_height,
 		"path": _serialize_cells(_main.path_cells),
 		"base_start": [ _main._base_start_cell.x, _main._base_start_cell.y ],
 		"base_end": [ _main._base_end_cell.x, _main._base_end_cell.y ],
@@ -328,8 +328,8 @@ func build_map_data() -> Dictionary:
 func apply_map_data(data: Dictionary) -> bool:
 	if data.is_empty():
 		return false
-	_main.grid_width = int(data.get("grid_width", _main.grid_width))
-	_main.grid_height = int(data.get("grid_height", _main.grid_height))
+	_main.config.grid_width = int(data.get("grid_width", _main.config.grid_width))
+	_main.config.grid_height = int(data.get("grid_height", _main.config.grid_height))
 	_main.path_cells = _parse_cells(data.get("path", []))
 	_main._base_start_cell = _parse_vec2i(data.get("base_start", []))
 	_main._base_end_cell = _parse_vec2i(data.get("base_end", []))

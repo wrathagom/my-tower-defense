@@ -1,5 +1,7 @@
 extends Node
 
+const GameConfig = preload("res://scripts/GameConfig.gd")
+
 var wood: int = 0
 var food: int = 0
 var stone: int = 0
@@ -63,22 +65,22 @@ func configure_resources(
 	unit_food_cost = unit_food_cost_value
 	_update_all()
 
-func set_costs(values: Dictionary) -> void:
-	tower_cost = values.get("tower_cost", 0)
-	woodcutter_cost = values.get("woodcutter_cost", 0)
-	stonecutter_cost = values.get("stonecutter_cost", 0)
-	archery_range_cost = values.get("archery_range_cost", 0)
-	house_cost = values.get("house_cost", 0)
-	farm_cost = values.get("farm_cost", 0)
-	wood_storage_cost = values.get("wood_storage_cost", 0)
-	food_storage_cost = values.get("food_storage_cost", 0)
-	stone_storage_cost = values.get("stone_storage_cost", 0)
-	base_upgrade_cost = values.get("base_upgrade_cost", 0)
-	base_upgrade_stone_cost = values.get("base_upgrade_stone_cost", 0)
-	stone_thrower_food_cost = values.get("stone_thrower_food_cost", 0)
-	stone_thrower_stone_cost = values.get("stone_thrower_stone_cost", 0)
-	archer_food_cost = values.get("archer_food_cost", 0)
-	archer_wood_cost = values.get("archer_wood_cost", 0)
+func set_costs(config: GameConfig) -> void:
+	tower_cost = config.tower_cost
+	woodcutter_cost = config.woodcutter_cost
+	stonecutter_cost = config.stonecutter_cost
+	archery_range_cost = config.archery_range_cost
+	house_cost = config.house_cost
+	farm_cost = config.farm_cost
+	wood_storage_cost = config.wood_storage_cost
+	food_storage_cost = config.food_storage_cost
+	stone_storage_cost = config.stone_storage_cost
+	base_upgrade_cost = config.base_upgrade_cost
+	base_upgrade_stone_cost = config.base_upgrade_stone_cost
+	stone_thrower_food_cost = config.stone_thrower_food_cost
+	stone_thrower_stone_cost = config.stone_thrower_stone_cost
+	archer_food_cost = config.archer_food_cost
+	archer_wood_cost = config.archer_wood_cost
 
 func set_labels(
 	wood_label_value: Label,
