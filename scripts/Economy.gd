@@ -34,8 +34,7 @@ var spawn_buttons: Dictionary = {}
 var unit_defs: Dictionary = {}
 var build_buttons: Dictionary = {}
 var build_defs: Dictionary = {}
-var has_archery_range: bool = false
-var has_archery_range_upgrade: bool = false
+var archery_level: int = 0
 var upgrade_button: Button
 var base_level: int = 1
 var base_upgrade_in_progress: bool = false
@@ -220,14 +219,13 @@ func add_stone_cap(amount: int) -> void:
 	stone = clampi(stone, 0, max_stone)
 	_update_all()
 
-func update_buttons_for_base_level(base_level_value: int, has_archery_range_value: bool, has_archery_range_upgrade_value: bool) -> void:
+func update_buttons_for_base_level(base_level_value: int, archery_level_value: int) -> void:
 	base_level = base_level_value
-	has_archery_range = has_archery_range_value
-	has_archery_range_upgrade = has_archery_range_upgrade_value
+	archery_level = archery_level_value
 	_update_buttons(base_level)
 
-func set_archery_range_upgrade(value: bool) -> void:
-	has_archery_range_upgrade = value
+func set_archery_level(value: int) -> void:
+	archery_level = value
 	_update_buttons(base_level)
 
 func set_base_upgrade_in_progress(value: bool) -> void:
@@ -264,14 +262,7 @@ func _update_spawn_buttons(base_level_value: int) -> void:
 			button.disabled = true
 			button.visible = false
 			continue
-		var min_level: int = def.get("min_base_level", 1)
-		var requires_range: bool = def.get("requires_archery_range", false)
-		var requires_upgrade: bool = def.get("requires_archery_range_upgrade", false)
-		var unlocked := base_level_value >= min_level
-		if requires_range:
-			unlocked = unlocked and has_archery_range
-		if requires_upgrade:
-			unlocked = unlocked and has_archery_range_upgrade
+		var unlocked := _requirements_met(def, base_level_value, archery_level)
 		var can_spawn := unlocked and can_spawn_unit_def(def)
 		button.disabled = not can_spawn
 		button.visible = unlocked
@@ -286,8 +277,31 @@ func _update_build_buttons(base_level_value: int) -> void:
 			button.disabled = true
 			button.visible = false
 			continue
-		var min_level: int = def.get("min_base_level", 1)
-		var unlocked := base_level_value >= min_level
+		var unlocked := _requirements_met(def, base_level_value, archery_level)
 		var can_build := unlocked and can_afford_cost(def)
 		button.disabled = not can_build
 		button.visible = unlocked
+
+func _requirements_met(def: Dictionary, base_level_value: int, archery_level_value: int) -> bool:
+	var requirements: Array = def.get("requirements", [])
+	if requirements.is_empty():
+		var min_level: int = def.get("min_base_level", 1)
+		if base_level_value < min_level:
+			return false
+		var requires_range: bool = def.get("requires_archery_range", false)
+		var requires_upgrade: bool = def.get("requires_archery_range_upgrade", false)
+		if requires_range and archery_level_value < 1:
+			return false
+		if requires_upgrade and archery_level_value < 2:
+			return false
+		return true
+	for req in requirements:
+		if req is Dictionary:
+			var req_type: String = str(req.get("type", ""))
+			if req_type == "base_level":
+				if base_level_value < int(req.get("value", 1)):
+					return false
+			elif req_type == "archery_level":
+				if archery_level_value < int(req.get("value", 0)):
+					return false
+	return true

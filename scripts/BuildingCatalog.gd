@@ -2,7 +2,9 @@ extends Node
 class_name BuildingCatalog
 
 const ORDER := [
-	"tower",
+	"grunt_tower",
+	"stone_tower",
+	"archer_tower",
 	"woodcutter",
 	"stonecutter",
 	"archery_range",
@@ -21,15 +23,43 @@ func get_order() -> Array[String]:
 
 func build_defs(main: Node) -> Dictionary:
 	return {
-		"tower": {
-			"label": "Tower",
+		"grunt_tower": {
+			"label": "Grunt Tower",
 			"spawn_type": "script",
-			"path": "res://scripts/Tower.gd",
+			"path": "res://scripts/GruntTower.gd",
 			"size": 1,
 			"placement": "grid",
 			"costs": {"wood": main.tower_cost},
 			"build_time": main.build_time_tower,
-			"min_base_level": 1,
+			"requirements": [{"type": "base_level", "value": 1}],
+			"uses_occupied": true,
+		},
+		"stone_tower": {
+			"label": "Stone Tower",
+			"spawn_type": "script",
+			"path": "res://scripts/StoneTower.gd",
+			"size": 1,
+			"placement": "grid",
+			"costs": {"stone": 10},
+			"build_time": main.build_time_tower,
+			"requirements": [
+				{"type": "base_level", "value": 1},
+				{"type": "archery_level", "value": 1},
+			],
+			"uses_occupied": true,
+		},
+		"archer_tower": {
+			"label": "Archer Tower",
+			"spawn_type": "script",
+			"path": "res://scripts/ArcherTower.gd",
+			"size": 1,
+			"placement": "grid",
+			"costs": {"wood": 10, "stone": 10},
+			"build_time": main.build_time_tower,
+			"requirements": [
+				{"type": "base_level", "value": 1},
+				{"type": "archery_level", "value": 2},
+			],
 			"uses_occupied": true,
 		},
 		"woodcutter": {
@@ -40,7 +70,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "tree",
 			"costs": {"wood": main.woodcutter_cost},
 			"build_time": main.build_time_woodcutter,
-			"min_base_level": 1,
+			"requirements": [{"type": "base_level", "value": 1}],
 			"resource_kind": "wood",
 		},
 		"stonecutter": {
@@ -51,7 +81,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "stone",
 			"costs": {"wood": main.stonecutter_cost},
 			"build_time": main.build_time_stonecutter,
-			"min_base_level": 2,
+			"requirements": [{"type": "base_level", "value": 2}],
 			"resource_kind": "stone",
 		},
 		"archery_range": {
@@ -62,7 +92,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "grid",
 			"costs": {"wood": main.archery_range_cost},
 			"build_time": main.build_time_archery_range,
-			"min_base_level": 2,
+			"requirements": [{"type": "base_level", "value": 2}],
 			"effect": "archery_range",
 		},
 		"house": {
@@ -73,7 +103,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "grid",
 			"costs": {"wood": main.house_cost},
 			"build_time": main.build_time_house,
-			"min_base_level": 1,
+			"requirements": [{"type": "base_level", "value": 1}],
 			"effect": "house",
 		},
 		"farm": {
@@ -84,7 +114,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "grid",
 			"costs": {"wood": main.farm_cost},
 			"build_time": main.build_time_farm,
-			"min_base_level": 1,
+			"requirements": [{"type": "base_level", "value": 1}],
 			"effect": "farm",
 		},
 		"wood_storage": {
@@ -95,7 +125,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "grid",
 			"costs": {"wood": main.wood_storage_cost},
 			"build_time": main.build_time_wood_storage,
-			"min_base_level": 1,
+			"requirements": [{"type": "base_level", "value": 1}],
 			"effect": "wood_storage",
 		},
 		"food_storage": {
@@ -106,7 +136,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "grid",
 			"costs": {"wood": main.food_storage_cost},
 			"build_time": main.build_time_food_storage,
-			"min_base_level": 1,
+			"requirements": [{"type": "base_level", "value": 1}],
 			"effect": "food_storage",
 		},
 		"stone_storage": {
@@ -117,7 +147,7 @@ func build_defs(main: Node) -> Dictionary:
 			"placement": "grid",
 			"costs": {"wood": main.stone_storage_cost},
 			"build_time": main.build_time_stone_storage,
-			"min_base_level": 2,
+			"requirements": [{"type": "base_level", "value": 2}],
 			"effect": "stone_storage",
 		},
 	}

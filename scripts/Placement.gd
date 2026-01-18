@@ -75,8 +75,8 @@ func _update_resource_hover(cell: Vector2i, def: Dictionary) -> void:
 	hover_resource_top_left = top_left
 	hover_resource_size = int(def.get("size", 2))
 	var has_cutter: bool = resource.get("has_cutter") != null and resource.get("has_cutter") != false
-	var min_level: int = def.get("min_base_level", 1)
-	hover_resource_valid = main._is_in_player_zone(cell) and main._base_level >= min_level and not has_cutter and economy.can_afford_cost(def)
+	var meets_reqs := _requirements_met(def)
+	hover_resource_valid = main._is_in_player_zone(cell) and meets_reqs and not has_cutter and economy.can_afford_cost(def)
 	main.queue_redraw()
 
 func _draw_resource_hover(drawer: Node2D) -> void:
@@ -95,9 +95,9 @@ func _update_grid_hover(cell: Vector2i, def: Dictionary) -> void:
 	hover_resource_valid = false
 	hover_build_top_left = cell
 	hover_build_size = int(def.get("size", 1))
-	var min_level: int = def.get("min_base_level", 1)
 	var has_resources: bool = economy.can_afford_cost(def)
-	hover_build_valid = _can_place_structure(cell, hover_build_size) and main._base_level >= min_level and has_resources
+	var meets_reqs := _requirements_met(def)
+	hover_build_valid = _can_place_structure(cell, hover_build_size) and has_resources and meets_reqs
 	main.queue_redraw()
 
 func _draw_building_hover(drawer: Node2D) -> void:
@@ -116,8 +116,7 @@ func _try_build_grid(def: Dictionary, world_pos: Vector2) -> bool:
 	var size: int = int(def.get("size", 1))
 	if not _can_place_structure(cell, size):
 		return false
-	var min_level: int = def.get("min_base_level", 1)
-	if main._base_level < min_level:
+	if not _requirements_met(def):
 		return false
 	if not economy.can_afford_cost(def):
 		return false
@@ -142,8 +141,7 @@ func _try_build_resource(def: Dictionary, world_pos: Vector2) -> bool:
 		return false
 	if not main._is_in_player_zone(cell):
 		return false
-	var min_level: int = def.get("min_base_level", 1)
-	if main._base_level < min_level:
+	if not _requirements_met(def):
 		return false
 	var resource: Node2D = resource_map[cell] as Node2D
 	if resource.get("has_cutter"):
@@ -209,9 +207,9 @@ func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
 	elif effect == "stone_storage":
 		economy.add_stone_cap(main.storage_capacity)
 	elif effect == "archery_range":
-		main._has_archery_range = true
+		main._archery_range_level = max(main._archery_range_level, 1)
 		main._register_archery_range(building)
-		economy.update_buttons_for_base_level(main._base_level, main._has_archery_range, main._has_archery_range_upgrade)
+		economy.update_buttons_for_base_level(main._base_level, main._archery_range_level)
 
 func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node2D:
 	var building: Node2D = load(scene_path).instantiate() as Node2D
@@ -269,6 +267,30 @@ func _can_place_structure(top_left: Vector2i, size: int) -> bool:
 				return false
 			if main._building_by_cell.has(cell):
 				return false
+	return true
+
+func _requirements_met(def: Dictionary) -> bool:
+	var requirements: Array = def.get("requirements", [])
+	if requirements.is_empty():
+		var min_level: int = def.get("min_base_level", 1)
+		if main._base_level < min_level:
+			return false
+		var requires_range: bool = def.get("requires_archery_range", false)
+		var requires_upgrade: bool = def.get("requires_archery_range_upgrade", false)
+		if requires_range and main._archery_range_level < 1:
+			return false
+		if requires_upgrade and main._archery_range_level < 2:
+			return false
+		return true
+	for req in requirements:
+		if req is Dictionary:
+			var req_type: String = str(req.get("type", ""))
+			if req_type == "base_level":
+				if main._base_level < int(req.get("value", 1)):
+					return false
+			elif req_type == "archery_level":
+				if main._archery_range_level < int(req.get("value", 0)):
+					return false
 	return true
 
 func _on_food_produced(amount: int) -> void:

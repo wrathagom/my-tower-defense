@@ -113,9 +113,8 @@ var _resource_spawner: ResourceSpawner
 var _building_by_cell: Dictionary = {}
 var _enemy_towers: Array[Node2D] = []
 var _enemy_tower_by_cell: Dictionary = {}
-var _build_mode := "tower"
-var _has_archery_range := false
-var _has_archery_range_upgrade := false
+var _build_mode := "grunt_tower"
+var _archery_range_level := 0
 var _archery_ranges: Array[Node2D] = []
 var _base_level := 1
 var _base_start_cell := Vector2i(-1, -1)
@@ -247,10 +246,10 @@ func _setup_economy() -> void:
 		"archer_wood_cost": archer_wood_cost,
 	})
 	_economy.set_labels(_wood_label, _food_label, _stone_label, _unit_label)
-	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 	_economy.configure_resources(starting_wood, starting_food, starting_stone, base_resource_cap, unit_food_cost)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
-	_economy.set_archery_range_upgrade(_has_archery_range_upgrade)
+	_economy.set_archery_level(_archery_range_level)
 
 func _setup_units() -> void:
 	var UnitCatalogScript: Script = load("res://scripts/UnitCatalog.gd")
@@ -266,7 +265,7 @@ func _setup_units() -> void:
 	_build_spawn_buttons()
 	_economy.set_unit_defs(_unit_defs)
 	_economy.set_spawn_buttons(_spawn_buttons)
-	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
 
 func _setup_buildings() -> void:
@@ -277,7 +276,7 @@ func _setup_buildings() -> void:
 	_build_build_buttons()
 	_economy.set_build_defs(_building_defs)
 	_economy.set_build_buttons(_build_buttons, _upgrade_button)
-	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 
 	var order: Array[String] = _building_catalog.get_order()
 	if not order.is_empty():
@@ -385,7 +384,7 @@ func _reset_game() -> void:
 	_base_upgrade_in_progress = false
 	_game_over = false
 	_game_over_panel.visible = false
-	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 	_economy.set_base_upgrade_in_progress(false)
 	_enemy_timer.start()
 	queue_redraw()
@@ -401,7 +400,7 @@ func _reset_for_play() -> void:
 		_game_over_panel.visible = false
 	if _economy != null:
 		_economy.configure_resources(starting_wood, starting_food, starting_stone, base_resource_cap, unit_food_cost)
-		_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+		_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 		_economy.set_base_upgrade_in_progress(false)
 	if _enemy_timer != null:
 		_enemy_timer.start()
@@ -463,10 +462,10 @@ func _update_base_label() -> void:
 	if _base_label != null:
 		_base_label.text = _base_label_text()
 	_update_upgrade_button_text()
-	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
 	_update_base_upgrade_indicator()
-	_economy.set_archery_range_upgrade(_has_archery_range_upgrade)
+	_economy.set_archery_level(_archery_range_level)
 
 func _set_splash_active(active: bool) -> void:
 	_splash_active = active
@@ -557,10 +556,10 @@ func _finish_base_upgrade() -> void:
 	_base_upgrade_in_progress = false
 	_update_base_label()
 	_update_enemy_spawn_rate()
-	_economy.update_buttons_for_base_level(_base_level, _has_archery_range, _has_archery_range_upgrade)
+	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 	_economy.set_base_upgrade_in_progress(false)
 	_update_base_upgrade_indicator()
-	_economy.set_archery_range_upgrade(_has_archery_range_upgrade)
+	_economy.set_archery_level(_archery_range_level)
 
 func _generate_random_path() -> void:
 	path_cells = []
@@ -807,7 +806,7 @@ func _get_archery_range_at(world_pos: Vector2) -> Node2D:
 func _try_upgrade_archery_range(range: Node2D) -> void:
 	if range == null or not is_instance_valid(range):
 		return
-	if _has_archery_range_upgrade:
+	if _archery_range_level >= 2:
 		return
 	if range.get("level") != null and int(range.get("level")) >= 2:
 		return
@@ -830,21 +829,27 @@ func _finish_archery_range_upgrade(range: Node2D) -> void:
 	range.set("upgrade_in_progress", false)
 	if range.has_method("upgrade"):
 		range.call("upgrade")
-	_has_archery_range_upgrade = true
-	_economy.set_archery_range_upgrade(true)
+	_archery_range_level = max(_archery_range_level, 2)
+	_economy.set_archery_level(_archery_range_level)
 	_update_archery_range_indicators()
 
 func _update_archery_range_indicators() -> void:
 	for range in _archery_ranges:
 		if range == null or not is_instance_valid(range):
 			continue
-		var show: bool = not _has_archery_range_upgrade and range.get("upgrade_in_progress") != true
+		var show: bool = _archery_range_level < 2 and range.get("upgrade_in_progress") != true
 		var can_upgrade: bool = _economy.can_afford_wood(archery_range_upgrade_cost) and _economy.stone >= archery_range_upgrade_stone_cost
 		if range.has_method("set_upgrade_indicator"):
 			range.call("set_upgrade_indicator", show, can_upgrade)
 
 func _register_archery_range(range: Node2D) -> void:
 	_archery_ranges.append(range)
+	var level_value: int = 1
+	if range.get("level") != null:
+		level_value = int(range.get("level"))
+	_archery_range_level = max(_archery_range_level, level_value)
+	if _economy != null:
+		_economy.set_archery_level(_archery_range_level)
 	_update_archery_range_indicators()
 
 func _is_over_player_base(world_pos: Vector2) -> bool:
@@ -1486,11 +1491,16 @@ func _clear_buildings() -> void:
 		building.queue_free()
 	_building_by_cell.clear()
 	_occupied.clear()
+	_clear_grunt_towers()
 	_archery_ranges.clear()
-	_has_archery_range = false
-	_has_archery_range_upgrade = false
+	_archery_range_level = 0
 	if _economy != null:
-		_economy.set_archery_range_upgrade(false)
+		_economy.set_archery_level(_archery_range_level)
+
+func _clear_grunt_towers() -> void:
+	for node in get_tree().get_nodes_in_group("grunt_towers"):
+		if node != null and is_instance_valid(node):
+			node.queue_free()
 
 func _clear_enemy_towers() -> void:
 	for tower in _enemy_towers:

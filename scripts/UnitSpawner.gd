@@ -31,19 +31,25 @@ func spawn_unit(unit_id: String, unit_def: Dictionary) -> void:
 	main.add_child(unit)
 
 func _is_unlocked(unit_def: Dictionary) -> bool:
-	var min_level: int = unit_def.get("min_base_level", 1)
-	if main._base_level < min_level:
-		return false
-	var requires_range: bool = unit_def.get("requires_archery_range", false)
-	if requires_range and not _has_active_archery_range():
-		return false
-	var requires_upgrade: bool = unit_def.get("requires_archery_range_upgrade", false)
-	if requires_upgrade and not main._has_archery_range_upgrade:
-		return false
+	var requirements: Array = unit_def.get("requirements", [])
+	if requirements.is_empty():
+		var min_level: int = unit_def.get("min_base_level", 1)
+		if main._base_level < min_level:
+			return false
+		var requires_range: bool = unit_def.get("requires_archery_range", false)
+		var requires_upgrade: bool = unit_def.get("requires_archery_range_upgrade", false)
+		if requires_range and main._archery_range_level < 1:
+			return false
+		if requires_upgrade and main._archery_range_level < 2:
+			return false
+		return true
+	for req in requirements:
+		if req is Dictionary:
+			var req_type: String = str(req.get("type", ""))
+			if req_type == "base_level":
+				if main._base_level < int(req.get("value", 1)):
+					return false
+			elif req_type == "archery_level":
+				if main._archery_range_level < int(req.get("value", 0)):
+					return false
 	return true
-
-func _has_active_archery_range() -> bool:
-	for range in main._archery_ranges:
-		if range != null and is_instance_valid(range):
-			return true
-	return false

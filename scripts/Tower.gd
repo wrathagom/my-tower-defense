@@ -6,6 +6,11 @@ extends Node2D
 @export var fire_rate := 1.0
 @export var damage := 1
 @export var bullet_speed := 320.0
+@export var projectile_scene := "res://scenes/Bullet.tscn"
+@export var projectile_color := Color(0.2, 0.6, 1.0)
+@export var body_color := Color(0.2, 0.8, 0.3)
+@export var border_color := Color(0.1, 0.4, 0.15)
+@export var arc_color := Color(0.2, 0.8, 0.3, 0.15)
 
 var _cooldown := 0.0
 
@@ -41,19 +46,18 @@ func _find_target() -> Node2D:
 	return closest
 
 func _spawn_bullet(target: Node2D) -> void:
-	var bullet := preload("res://scenes/Bullet.tscn").instantiate()
+	var bullet: Node2D = load(projectile_scene).instantiate() as Node2D
 	bullet.position = position
 	bullet.target = target
 	bullet.speed = bullet_speed
 	bullet.damage = damage
+	bullet.draw_color = projectile_color
 	get_parent().add_child(bullet)
 
 func _draw() -> void:
 	var size := cell_size * 0.6
 	var half := size * 0.5
-	var body_color := Color(0.2, 0.8, 0.3)
-	var border_color := Color(0.1, 0.4, 0.15)
 	var rect := Rect2(-half, -half, size, size)
 	draw_rect(rect, body_color, true)
 	draw_rect(rect, border_color, false, 2.0)
-	draw_arc(Vector2.ZERO, attack_range, 0.0, TAU, 64, Color(0.2, 0.8, 0.3, 0.15), 2.0)
+	draw_arc(Vector2.ZERO, attack_range, 0.0, TAU, 64, arc_color, 2.0)
