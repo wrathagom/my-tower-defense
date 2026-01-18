@@ -14,17 +14,21 @@ extends Node2D
 @export var player_zone_width := 7
 @export var tree_count := 18
 @export var stone_count := 8
+@export var iron_count := 4
 @export var starting_wood := 20
 @export var starting_food := 0
 @export var starting_stone := 0
+@export var starting_iron := 0
 @export var woodcutter_cost := 10
 @export var stonecutter_cost := 15
+@export var iron_miner_cost := 15
 @export var tower_cost := 10
 @export var house_cost := 10
 @export var farm_cost := 10
 @export var wood_storage_cost := 10
 @export var food_storage_cost := 10
 @export var stone_storage_cost := 10
+@export var iron_storage_cost := 10
 @export var house_capacity := 10
 @export var unit_food_cost := 2
 @export var stone_thrower_food_cost := 2
@@ -43,11 +47,13 @@ extends Node2D
 @export var build_time_tower := 10.0
 @export var build_time_woodcutter := 10.0
 @export var build_time_stonecutter := 10.0
+@export var build_time_iron_miner := 10.0
 @export var build_time_house := 10.0
 @export var build_time_farm := 10.0
 @export var build_time_wood_storage := 10.0
 @export var build_time_food_storage := 10.0
 @export var build_time_stone_storage := 10.0
+@export var build_time_iron_storage := 10.0
 @export var build_time_archery_range := 10.0
 @export var base_upgrade_times: Array[float] = [10.0, 15.0, 20.0]
 @export var zone_upgrade_amount := 3
@@ -114,6 +120,7 @@ var _building_catalog: Node
 var _building_defs: Dictionary = {}
 var _food_label: Label
 var _stone_label: Label
+var _iron_label: Label
 var _unit_label: Label
 var _economy: Node
 var _placement: Node
@@ -121,6 +128,8 @@ var _trees: Array[Node2D] = []
 var _tree_by_cell: Dictionary = {}
 var _stones: Array[Node2D] = []
 var _stone_by_cell: Dictionary = {}
+var _irons: Array[Node2D] = []
+var _iron_by_cell: Dictionary = {}
 var _resource_spawner: ResourceSpawner
 var _building_by_cell: Dictionary = {}
 var _enemy_towers: Array[Node2D] = []
@@ -259,9 +268,9 @@ func _setup_economy() -> void:
 		"archer_food_cost": archer_food_cost,
 		"archer_wood_cost": archer_wood_cost,
 	})
-	_economy.set_labels(_wood_label, _food_label, _stone_label, _unit_label)
+	_economy.set_labels(_wood_label, _food_label, _stone_label, _iron_label, _unit_label)
 	_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
-	_economy.configure_resources(starting_wood, starting_food, starting_stone, base_resource_cap, unit_food_cost)
+	_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
 	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
 	_economy.set_archery_level(_archery_range_level)
 
@@ -378,12 +387,15 @@ func _building_cost_label(def: Dictionary) -> String:
 	var food_cost: int = costs.get("food", 0)
 	var wood_cost: int = costs.get("wood", 0)
 	var stone_cost: int = costs.get("stone", 0)
+	var iron_cost: int = costs.get("iron", 0)
 	if food_cost > 0:
 		parts.append("%dF" % food_cost)
 	if wood_cost > 0:
 		parts.append("%dW" % wood_cost)
 	if stone_cost > 0:
 		parts.append("%dS" % stone_cost)
+	if iron_cost > 0:
+		parts.append("%dI" % iron_cost)
 	return "+".join(parts)
 
 func _build_spawn_buttons() -> void:
@@ -410,12 +422,15 @@ func _unit_cost_label(def: Dictionary) -> String:
 	var food_cost: int = def.get("food_cost", 0)
 	var wood_cost: int = def.get("wood_cost", 0)
 	var stone_cost: int = def.get("stone_cost", 0)
+	var iron_cost: int = def.get("iron_cost", 0)
 	if food_cost > 0:
 		parts.append("%dF" % food_cost)
 	if wood_cost > 0:
 		parts.append("%dW" % wood_cost)
 	if stone_cost > 0:
 		parts.append("%dS" % stone_cost)
+	if iron_cost > 0:
+		parts.append("%dI" % iron_cost)
 	return "+".join(parts)
 
 func _spawn_unit_by_id(unit_id: String) -> void:
@@ -460,7 +475,7 @@ func _reset_for_play() -> void:
 		_game_over_panel.visible = false
 	_set_upgrade_modal_visible(false)
 	if _economy != null:
-		_economy.configure_resources(starting_wood, starting_food, starting_stone, base_resource_cap, unit_food_cost)
+		_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
 		_economy.update_buttons_for_base_level(_base_level, _archery_range_level)
 		_economy.set_base_upgrade_in_progress(false)
 	if _enemy_timer != null:
@@ -644,7 +659,9 @@ func _base_upgrade_cost_text() -> String:
 func _base_upgrade_unlocks() -> String:
 	if _base_level == 1:
 		return "Stonecutter, Archery Range, Stone Storage, Stone Thrower"
-	if _base_level >= 2:
+	if _base_level == 2:
+		return "Iron Miner, Iron Storage"
+	if _base_level >= 3:
 		return "More build radius"
 	return "-"
 
@@ -1027,6 +1044,8 @@ func _add_path_cell(world_pos: Vector2) -> void:
 		return
 	if _stone_by_cell.has(cell):
 		return
+	if _iron_by_cell.has(cell):
+		return
 	if _building_by_cell.has(cell):
 		return
 	if _is_path_cell(cell):
@@ -1204,7 +1223,10 @@ func _on_editor_save_pressed() -> void:
 		_set_editor_status("Add at least 1 tree in the rightmost %d columns." % player_zone_width)
 		return
 	if not _has_stone_in_player_band():
-		_set_editor_status("Add at least 1 stone in the rightmost %d columns." % min(player_zone_width + 3, grid_width))
+		_set_editor_status("Add at least 1 stone in the rightmost %d columns." % min(10, grid_width))
+		return
+	if not _has_iron_in_player_band():
+		_set_editor_status("Add at least 1 iron in the rightmost %d columns." % min(13, grid_width))
 		return
 	var MapIOScript: Script = load("res://scripts/MapIO.gd")
 	var ok: bool = MapIOScript.call("save_map", name, data)
@@ -1320,7 +1342,7 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 	if not _is_in_bounds(cell):
 		return
 	if _editor_tool == "path":
-		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
 			return
 		if not path_cells.has(cell):
 			path_cells.append(cell)
@@ -1329,7 +1351,7 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 		return
 	if _editor_tool == "erase":
 		if _resource_spawner != null:
-			if _resource_spawner.remove_tree_at(cell) or _resource_spawner.remove_stone_at(cell):
+			if _resource_spawner.remove_tree_at(cell) or _resource_spawner.remove_stone_at(cell) or _resource_spawner.remove_iron_at(cell):
 				queue_redraw()
 				return
 		if _remove_enemy_tower_at(cell):
@@ -1366,14 +1388,16 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 		_place_enemy_tower(cell)
 		queue_redraw()
 		return
-	if _editor_tool == "tree" or _editor_tool == "stone":
+	if _editor_tool == "tree" or _editor_tool == "stone" or _editor_tool == "iron":
 		if _resource_spawner == null:
 			return
 		var placed := false
 		if _editor_tool == "tree":
 			placed = _resource_spawner.place_tree(cell)
-		else:
+		elif _editor_tool == "stone":
 			placed = _resource_spawner.place_stone(cell)
+		else:
+			placed = _resource_spawner.place_iron(cell)
 		if placed:
 			queue_redraw()
 		return
@@ -1395,7 +1419,7 @@ func _can_place_base(center: Vector2i, kind: String) -> bool:
 			var cell := Vector2i(center.x + dx, center.y + dy)
 			if not _is_in_bounds(cell):
 				return false
-			if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+			if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
 				return false
 			if path_cells.has(cell) and cell != center:
 				return false
@@ -1418,7 +1442,7 @@ func _can_place_enemy_tower(cell: Vector2i) -> bool:
 		return false
 	if path_cells.has(cell):
 		return false
-	if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+	if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
 		return false
 	if _enemy_tower_by_cell.has(cell):
 		return false
@@ -1457,12 +1481,12 @@ func _draw_editor_hover() -> void:
 		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
 			return
 		_draw_editor_square(cell, 1, true)
-	elif _editor_tool == "tree" or _editor_tool == "stone":
+	elif _editor_tool == "tree" or _editor_tool == "stone" or _editor_tool == "iron":
 		var cell := _mouse_cell()
 		if not _is_in_bounds(cell):
 			return
 		var valid := true
-		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
 			valid = false
 		if path_cells.has(cell) or _is_base_cell(cell):
 			valid = false
@@ -1477,7 +1501,7 @@ func _draw_editor_hover() -> void:
 		var cell := _mouse_cell()
 		if not _is_in_bounds(cell):
 			return
-		var valid := _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or path_cells.has(cell) or _is_base_cell(cell) or _enemy_tower_by_cell.has(cell)
+		var valid := _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell) or path_cells.has(cell) or _is_base_cell(cell) or _enemy_tower_by_cell.has(cell)
 		_draw_editor_square(cell, 1, valid)
 
 func _mouse_cell() -> Vector2i:
@@ -1520,6 +1544,7 @@ func _build_map_data() -> Dictionary:
 		"base_end": [ _base_end_cell.x, _base_end_cell.y ],
 		"trees": _serialize_cells(_collect_resource_cells(_trees)),
 		"stones": _serialize_cells(_collect_resource_cells(_stones)),
+		"irons": _serialize_cells(_collect_resource_cells(_irons)),
 		"enemy_towers": _serialize_cells(_collect_enemy_tower_cells()),
 	}
 	return data
@@ -1539,7 +1564,8 @@ func _apply_map_data(data: Dictionary) -> bool:
 	if _resource_spawner != null:
 		var tree_cells := _parse_cells(data.get("trees", []))
 		var stone_cells := _parse_cells(data.get("stones", []))
-		_resource_spawner.spawn_from_cells(tree_cells, stone_cells)
+		var iron_cells := _parse_cells(data.get("irons", []))
+		_resource_spawner.spawn_from_cells(tree_cells, stone_cells, iron_cells)
 	_clear_enemy_towers()
 	var enemy_cells := _parse_cells(data.get("enemy_towers", []))
 	for cell in enemy_cells:
@@ -1590,6 +1616,19 @@ func _has_stone_in_player_band() -> bool:
 		if stone == null or not is_instance_valid(stone):
 			continue
 		var cell_value = stone.get("cell")
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			continue
+		var cell: Vector2i = cell_value
+		if cell.x >= min_x:
+			return true
+	return false
+
+func _has_iron_in_player_band() -> bool:
+	var min_x: int = max(grid_width - 13, 0)
+	for iron in _irons:
+		if iron == null or not is_instance_valid(iron):
+			continue
+		var cell_value = iron.get("cell")
 		if typeof(cell_value) != TYPE_VECTOR2I:
 			continue
 		var cell: Vector2i = cell_value
@@ -1713,6 +1752,9 @@ func _stone_band_bounds() -> Vector2i:
 func _is_in_stone_band(cell: Vector2i) -> bool:
 	var band: Vector2i = _stone_band_bounds()
 	return cell.x >= band.x and cell.x <= band.y
+
+func _is_in_iron_band(cell: Vector2i) -> bool:
+	return cell.x >= max(grid_width - 13, 0)
 
 func _is_in_base_band(cell: Vector2i) -> bool:
 	var band := _base_band_bounds()

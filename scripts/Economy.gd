@@ -3,9 +3,11 @@ extends Node
 var wood: int = 0
 var food: int = 0
 var stone: int = 0
+var iron: int = 0
 var max_wood: int = 0
 var max_food: int = 0
 var max_stone: int = 0
+var max_iron: int = 0
 var max_units: int = 0
 var current_units: int = 0
 
@@ -29,6 +31,7 @@ var base_upgrade_stone_cost: int = 0
 var wood_label: Label
 var food_label: Label
 var stone_label: Label
+var iron_label: Label
 var unit_label: Label
 var spawn_buttons: Dictionary = {}
 var unit_defs: Dictionary = {}
@@ -44,15 +47,18 @@ func configure_resources(
 	starting_wood: int,
 	starting_food: int,
 	starting_stone: int,
+	starting_iron: int,
 	base_cap: int,
 	unit_food_cost_value: int
 ) -> void:
 	max_wood = base_cap
 	max_food = base_cap
 	max_stone = base_cap
+	max_iron = base_cap
 	wood = min(starting_wood, max_wood)
 	food = min(starting_food, max_food)
 	stone = min(starting_stone, max_stone)
+	iron = min(starting_iron, max_iron)
 	unit_food_cost = unit_food_cost_value
 	_update_all()
 
@@ -77,11 +83,13 @@ func set_labels(
 	wood_label_value: Label,
 	food_label_value: Label,
 	stone_label_value: Label,
+	iron_label_value: Label,
 	unit_label_value: Label
 ) -> void:
 	wood_label = wood_label_value
 	food_label = food_label_value
 	stone_label = stone_label_value
+	iron_label = iron_label_value
 	unit_label = unit_label_value
 	_update_labels()
 
@@ -118,6 +126,10 @@ func add_stone(amount: int) -> void:
 	stone = clampi(stone + amount, 0, max_stone)
 	_update_all()
 
+func add_iron(amount: int) -> void:
+	iron = clampi(iron + amount, 0, max_iron)
+	_update_all()
+
 func spend_wood(amount: int) -> bool:
 	if wood < amount:
 		return false
@@ -132,6 +144,13 @@ func spend_stone(amount: int) -> bool:
 	_update_all()
 	return true
 
+func spend_iron(amount: int) -> bool:
+	if iron < amount:
+		return false
+	iron -= amount
+	_update_all()
+	return true
+
 func can_afford_wood(amount: int) -> bool:
 	return wood >= amount
 
@@ -140,7 +159,8 @@ func can_afford_cost(def: Dictionary) -> bool:
 	var food_cost: int = costs.get("food", 0)
 	var wood_cost: int = costs.get("wood", 0)
 	var stone_cost: int = costs.get("stone", 0)
-	return food >= food_cost and wood >= wood_cost and stone >= stone_cost
+	var iron_cost: int = costs.get("iron", 0)
+	return food >= food_cost and wood >= wood_cost and stone >= stone_cost and iron >= iron_cost
 
 func spend_cost(def: Dictionary) -> bool:
 	if not can_afford_cost(def):
@@ -149,9 +169,11 @@ func spend_cost(def: Dictionary) -> bool:
 	var food_cost: int = costs.get("food", 0)
 	var wood_cost: int = costs.get("wood", 0)
 	var stone_cost: int = costs.get("stone", 0)
+	var iron_cost: int = costs.get("iron", 0)
 	food = clampi(food - food_cost, 0, max_food)
 	wood = clampi(wood - wood_cost, 0, max_wood)
 	stone = clampi(stone - stone_cost, 0, max_stone)
+	iron = clampi(iron - iron_cost, 0, max_iron)
 	_update_all()
 	return true
 
@@ -168,7 +190,8 @@ func can_spawn_unit_def(def: Dictionary) -> bool:
 	var food_cost: int = def.get("food_cost", 0)
 	var wood_cost: int = def.get("wood_cost", 0)
 	var stone_cost: int = def.get("stone_cost", 0)
-	return food >= food_cost and wood >= wood_cost and stone >= stone_cost and current_units < max_units
+	var iron_cost: int = def.get("iron_cost", 0)
+	return food >= food_cost and wood >= wood_cost and stone >= stone_cost and iron >= iron_cost and current_units < max_units
 
 func on_unit_spawned() -> void:
 	food = clampi(food - unit_food_cost, 0, max_food)
@@ -191,9 +214,11 @@ func on_unit_spawned_def(def: Dictionary) -> void:
 	var food_cost: int = def.get("food_cost", 0)
 	var wood_cost: int = def.get("wood_cost", 0)
 	var stone_cost: int = def.get("stone_cost", 0)
+	var iron_cost: int = def.get("iron_cost", 0)
 	food = clampi(food - food_cost, 0, max_food)
 	wood = clampi(wood - wood_cost, 0, max_wood)
 	stone = clampi(stone - stone_cost, 0, max_stone)
+	iron = clampi(iron - iron_cost, 0, max_iron)
 	current_units += 1
 	_update_all()
 
@@ -224,6 +249,11 @@ func add_stone_cap(amount: int) -> void:
 	stone = clampi(stone, 0, max_stone)
 	_update_all()
 
+func add_iron_cap(amount: int) -> void:
+	max_iron += amount
+	iron = clampi(iron, 0, max_iron)
+	_update_all()
+
 func update_buttons_for_base_level(base_level_value: int, archery_level_value: int) -> void:
 	base_level = base_level_value
 	archery_level = archery_level_value
@@ -248,6 +278,8 @@ func _update_labels() -> void:
 		food_label.text = "Food: %d / %d" % [food, max_food]
 	if stone_label != null:
 		stone_label.text = "Stone: %d / %d" % [stone, max_stone]
+	if iron_label != null:
+		iron_label.text = "Iron: %d / %d" % [iron, max_iron]
 	if unit_label != null:
 		unit_label.text = "Units: %d / %d" % [current_units, max_units]
 

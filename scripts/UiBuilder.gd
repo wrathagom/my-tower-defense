@@ -62,6 +62,10 @@ func build(main: Node) -> void:
 	main._stone_label.text = "Stone: 0 / 0"
 	top_center.add_child(main._stone_label)
 
+	main._iron_label = Label.new()
+	main._iron_label.text = "Iron: 0 / 0"
+	top_center.add_child(main._iron_label)
+
 	main._unit_label = Label.new()
 	main._unit_label.text = "Units: 0 / 0"
 	top_center.add_child(main._unit_label)
@@ -378,6 +382,10 @@ func build(main: Node) -> void:
 	stone_button.text = "Stone"
 	stone_button.pressed.connect(main._on_editor_tool_pressed.bind("stone"))
 	resource_row.add_child(stone_button)
+	var iron_button: Button = Button.new()
+	iron_button.text = "Iron"
+	iron_button.pressed.connect(main._on_editor_tool_pressed.bind("iron"))
+	resource_row.add_child(iron_button)
 
 	var enemy_row: HBoxContainer = HBoxContainer.new()
 	enemy_row.add_theme_constant_override("separation", 6)

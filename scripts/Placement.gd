@@ -20,7 +20,7 @@ func handle_build_click(world_pos: Vector2, mode: String) -> bool:
 	if def.is_empty():
 		return false
 	var placement: String = str(def.get("placement", "grid"))
-	if placement == "tree" or placement == "stone":
+	if placement == "tree" or placement == "stone" or placement == "iron":
 		return _try_build_resource(def, world_pos)
 	return _try_build_grid(def, world_pos)
 
@@ -45,7 +45,7 @@ func update_hover(world_pos: Vector2, mode: String) -> void:
 		main.queue_redraw()
 		return
 	var placement: String = str(def.get("placement", "grid"))
-	if placement == "tree" or placement == "stone":
+	if placement == "tree" or placement == "stone" or placement == "iron":
 		_update_resource_hover(cell, def)
 		return
 	_update_grid_hover(cell, def)
@@ -65,6 +65,8 @@ func _update_resource_hover(cell: Vector2i, def: Dictionary) -> void:
 	hover_build_valid = false
 	var placement: String = str(def.get("placement", ""))
 	var resource_map: Dictionary = main._tree_by_cell if placement == "tree" else main._stone_by_cell
+	if placement == "iron":
+		resource_map = main._iron_by_cell
 	if not resource_map.has(cell):
 		hover_resource_top_left = Vector2i(-1, -1)
 		hover_resource_valid = false
@@ -76,7 +78,8 @@ func _update_resource_hover(cell: Vector2i, def: Dictionary) -> void:
 	hover_resource_size = int(def.get("size", 2))
 	var has_cutter: bool = resource.get("has_cutter") != null and resource.get("has_cutter") != false
 	var meets_reqs := _requirements_met(def)
-	hover_resource_valid = main._is_in_player_zone(cell) and meets_reqs and not has_cutter and economy.can_afford_cost(def)
+	var zone_ok := _resource_zone_ok(cell, placement)
+	hover_resource_valid = zone_ok and meets_reqs and not has_cutter and economy.can_afford_cost(def)
 	main.queue_redraw()
 
 func _draw_resource_hover(drawer: Node2D) -> void:
@@ -137,9 +140,11 @@ func _try_build_resource(def: Dictionary, world_pos: Vector2) -> bool:
 	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
 	var placement: String = str(def.get("placement", ""))
 	var resource_map: Dictionary = main._tree_by_cell if placement == "tree" else main._stone_by_cell
+	if placement == "iron":
+		resource_map = main._iron_by_cell
 	if not resource_map.has(cell):
 		return false
-	if not main._is_in_player_zone(cell):
+	if not _resource_zone_ok(cell, placement):
 		return false
 	if not _requirements_met(def):
 		return false
@@ -188,6 +193,8 @@ func _finish_resource_building(_construction: Node2D, def: Dictionary, resource:
 		cutter.wood_produced.connect(_on_wood_produced)
 	elif kind == "stone":
 		cutter.stone_produced.connect(_on_stone_produced)
+	elif kind == "iron":
+		cutter.iron_produced.connect(_on_iron_produced)
 	resource.add_child(cutter)
 	resource.set("has_cutter", true)
 
@@ -206,6 +213,8 @@ func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
 		economy.add_food_cap(main.storage_capacity)
 	elif effect == "stone_storage":
 		economy.add_stone_cap(main.storage_capacity)
+	elif effect == "iron_storage":
+		economy.add_iron_cap(main.storage_capacity)
 	elif effect == "archery_range":
 		main._archery_range_level = max(main._archery_range_level, 1)
 		main._register_archery_range(building)
@@ -263,6 +272,8 @@ func _can_place_structure(top_left: Vector2i, size: int) -> bool:
 				return false
 			if main._stone_by_cell.has(cell):
 				return false
+			if main._iron_by_cell.has(cell):
+				return false
 			if main._enemy_tower_by_cell.has(cell):
 				return false
 			if main._building_by_cell.has(cell):
@@ -301,3 +312,8 @@ func _on_wood_produced(amount: int) -> void:
 
 func _on_stone_produced(amount: int) -> void:
 	economy.add_stone(amount)
+
+func _on_iron_produced(amount: int) -> void:
+	economy.add_iron(amount)
+func _resource_zone_ok(cell: Vector2i, placement: String) -> bool:
+	return main._is_in_player_zone(cell)

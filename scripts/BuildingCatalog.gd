@@ -7,12 +7,14 @@ const ORDER := [
 	"archer_tower",
 	"woodcutter",
 	"stonecutter",
+	"iron_miner",
 	"archery_range",
 	"house",
 	"farm",
 	"wood_storage",
 	"food_storage",
 	"stone_storage",
+	"iron_storage",
 ]
 const CATEGORY_ORDER := ["Towers", "Production", "Military", "Housing", "Storage"]
 
@@ -96,6 +98,18 @@ func build_defs(main: Node) -> Dictionary:
 			"requirements": [{"type": "base_level", "value": 2}],
 			"resource_kind": "stone",
 		},
+		"iron_miner": {
+			"label": "Iron Miner",
+			"category": "Production",
+			"spawn_type": "scene",
+			"path": "res://scenes/IronMiner.tscn",
+			"size": 2,
+			"placement": "iron",
+			"costs": {"wood": main.iron_miner_cost},
+			"build_time": main.build_time_iron_miner,
+			"requirements": [{"type": "base_level", "value": 3}],
+			"resource_kind": "iron",
+		},
 		"archery_range": {
 			"label": "Archery Range",
 			"category": "Military",
@@ -167,5 +181,17 @@ func build_defs(main: Node) -> Dictionary:
 			"build_time": main.build_time_stone_storage,
 			"requirements": [{"type": "base_level", "value": 2}],
 			"effect": "stone_storage",
+		},
+		"iron_storage": {
+			"label": "Iron Storage",
+			"category": "Storage",
+			"spawn_type": "scene",
+			"path": "res://scenes/IronStorage.tscn",
+			"size": 2,
+			"placement": "grid",
+			"costs": {"wood": main.iron_storage_cost},
+			"build_time": main.build_time_iron_storage,
+			"requirements": [{"type": "base_level", "value": 3}],
+			"effect": "iron_storage",
 		},
 	}
