@@ -7,6 +7,7 @@ extends Node2D
 signal stone_produced(amount: int)
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	var timer := Timer.new()
 	timer.wait_time = tick_seconds
 	timer.autostart = true

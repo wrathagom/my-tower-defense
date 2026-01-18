@@ -71,9 +71,7 @@ var _occupied := {}
 var _enemy_timer: Timer
 var _ordered_path_cells: Array[Vector2i] = []
 var _path_valid := false
-var _camera: Camera2D
-var _camera_zoom := 1.0
-var _camera_target := Vector2.ZERO
+var _camera_controller: Node
 var _base_start: Base
 var _base_end: Base
 var _ui_layer: CanvasLayer
@@ -111,7 +109,6 @@ var _upgrade_modal_button: Button
 var _upgrade_modal_close: Button
 var _upgrade_modal_target: Node2D
 var _upgrade_modal_type := ""
-var _game_over := false
 var _wood_label: Label
 var _build_label: Label
 var _base_label: Label
@@ -134,50 +131,45 @@ var _resource_defs: Dictionary = {}
 var _resource_order: Array[String] = []
 var _resource_state: Dictionary = {}
 var _resource_spawner: ResourceSpawner
+var _path_generator: Node
+var _game_state_manager: Node
+var _upgrade_manager: Node
+var _map_editor: Node
 var _building_by_cell: Dictionary = {}
 var _enemy_towers: Array[Node2D] = []
 var _enemy_tower_by_cell: Dictionary = {}
 var _build_mode := "grunt_tower"
-var _archery_range_level := 0
-var _archery_ranges: Array[Node2D] = []
-var _barracks_level := 0
-var _base_level := 1
 var _base_start_cell := Vector2i(-1, -1)
 var _base_end_cell := Vector2i(-1, -1)
-var _base_upgrade_in_progress := false
-var _splash_active := true
-var _paused := false
-var _fast_forward := false
 var _editor_active := false
-var _editor_tool := "path"
-var _use_custom_map := false
-var _map_data: Dictionary = {}
-var _map_list: Array[String] = []
-var _editor_dragging := false
-var _editor_last_cell := Vector2i(-1, -1)
 
 func _ready() -> void:
-	_setup_camera()
+	_setup_camera_controller()
 	_setup_resource_catalog()
+	_setup_economy()
+	_setup_upgrade_manager()
 	_setup_ui_builder()
-	_update_editor_tool_label()
-	_refresh_map_list()
+	_economy.set_labels(_wood_label, _food_label, _stone_label, _iron_label, _unit_label)
+	_upgrade_manager._sync_ui_refs()
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	if _ui_layer != null:
 		_ui_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_enemy_timer()
-	_setup_economy()
+	_setup_game_state_manager()
 	_setup_units()
 	_setup_buildings()
 	_setup_placement()
 	_setup_resource_spawner()
+	_setup_path_generator()
+	_setup_map_editor()
+	_map_editor.update_tool_label()
+	_map_editor.refresh_map_list()
 	_update_base_label()
-	_update_speed_button_text()
 	if auto_generate_path and path_cells.is_empty():
 		_generate_random_path()
 	_rebuild_path()
 	_resource_spawner.spawn_resources()
-	_set_splash_active(true)
+	_game_state_manager.set_splash_active(true)
 	queue_redraw()
 
 func _exit_tree() -> void:
@@ -185,45 +177,35 @@ func _exit_tree() -> void:
 	_log_exit_diagnostics()
 
 func _process(_delta: float) -> void:
-	if _splash_active:
+	if _game_state_manager.is_splash_active():
 		return
-	if _paused:
+	if _game_state_manager.is_paused():
 		return
 	if _editor_active:
-		_update_camera_controls(_delta)
+		if _camera_controller != null:
+			_camera_controller.update(_delta, true)
 		queue_redraw()
 		return
 	if _upgrade_modal != null and _upgrade_modal.visible:
 		_update_upgrade_modal()
 	if _placement != null:
 		_placement.update_hover(get_global_mouse_position(), _build_mode)
-	_update_camera_controls(_delta)
-	if _base_end != null and not _game_over:
+	if _camera_controller != null:
+		_camera_controller.update(_delta, false)
+	if _base_end != null and not _game_state_manager.is_game_over():
 		_update_base_upgrade_indicator()
 	_update_archery_range_indicators()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _splash_active:
+	if _game_state_manager.is_splash_active():
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-		_camera_zoom = clampf(_camera_zoom * 1.1, 0.15, 2.5)
-		_camera.zoom = Vector2(_camera_zoom, _camera_zoom)
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-		_camera_zoom = clampf(_camera_zoom / 1.1, 0.15, 2.5)
-		_camera.zoom = Vector2(_camera_zoom, _camera_zoom)
+	if event is InputEventMouseButton and _camera_controller != null:
+		_camera_controller.handle_zoom_input(event)
 	if _editor_active:
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				_editor_dragging = true
-				_editor_last_cell = Vector2i(-1, -1)
-				_handle_editor_click(get_global_mouse_position())
-			else:
-				_editor_dragging = false
-		elif event is InputEventMouseMotion and _editor_dragging:
-			_handle_editor_drag(get_global_mouse_position())
+		_map_editor.handle_input(event)
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		_set_paused(not _paused)
+		_game_state_manager.set_paused(not _game_state_manager.is_paused())
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var world_pos := get_global_mouse_position()
@@ -275,12 +257,7 @@ func _setup_economy() -> void:
 		"swordsman_food_cost": swordsman_food_cost,
 		"swordsman_iron_cost": swordsman_iron_cost,
 	})
-	_economy.set_labels(_wood_label, _food_label, _stone_label, _iron_label, _unit_label)
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
 	_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
-	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
-	_economy.set_archery_level(_archery_range_level)
-	_economy.set_barracks_level(_barracks_level)
 
 func _setup_units() -> void:
 	var UnitCatalogScript: Script = load("res://scripts/UnitCatalog.gd")
@@ -296,8 +273,8 @@ func _setup_units() -> void:
 	_build_spawn_buttons()
 	_economy.set_unit_defs(_unit_defs)
 	_economy.set_spawn_buttons(_spawn_buttons)
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
-	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
+	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
+	_economy.set_base_upgrade_in_progress(_upgrade_manager.base_upgrade_in_progress)
 
 func _setup_buildings() -> void:
 	var BuildingCatalogScript: Script = load("res://scripts/BuildingCatalog.gd")
@@ -311,7 +288,7 @@ func _setup_buildings() -> void:
 	if _build_category == "":
 		_build_category = _default_build_category()
 	_set_build_category(_build_category)
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
+	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 
 	var order: Array[String] = _building_catalog.get_order()
 	if not order.is_empty():
@@ -327,6 +304,36 @@ func _setup_resource_spawner() -> void:
 	_resource_spawner = ResourceSpawner.new()
 	add_child(_resource_spawner)
 	_resource_spawner.setup(self, _resource_defs, _resource_order)
+
+func _setup_path_generator() -> void:
+	var PathGeneratorScript: Script = load("res://scripts/PathGenerator.gd")
+	_path_generator = PathGeneratorScript.new()
+	add_child(_path_generator)
+	_path_generator.setup(self)
+
+func _setup_camera_controller() -> void:
+	var CameraControllerScript: Script = load("res://scripts/CameraController.gd")
+	_camera_controller = CameraControllerScript.new()
+	add_child(_camera_controller)
+	_camera_controller.setup(self)
+
+func _setup_game_state_manager() -> void:
+	var GameStateManagerScript: Script = load("res://scripts/GameStateManager.gd")
+	_game_state_manager = GameStateManagerScript.new()
+	add_child(_game_state_manager)
+	_game_state_manager.setup(self)
+
+func _setup_upgrade_manager() -> void:
+	var UpgradeManagerScript: Script = load("res://scripts/UpgradeManager.gd")
+	_upgrade_manager = UpgradeManagerScript.new()
+	add_child(_upgrade_manager)
+	_upgrade_manager.setup(self, _economy)
+
+func _setup_map_editor() -> void:
+	var MapEditorScript: Script = load("res://scripts/MapEditor.gd")
+	_map_editor = MapEditorScript.new()
+	add_child(_map_editor)
+	_map_editor.setup(self, _resource_spawner)
 
 func _setup_resource_catalog() -> void:
 	var ResourceCatalogScript: Script = load("res://scripts/ResourceCatalog.gd")
@@ -388,7 +395,7 @@ func _set_build_category(category: String) -> void:
 	if _economy != null:
 		_economy.set_build_buttons(_build_buttons, _upgrade_button)
 		_economy.set_build_category_filter("")
-		_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
+		_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 	if _build_category_buttons.has(category):
 		_set_build_mode_for_category(category)
 
@@ -482,10 +489,9 @@ func _reset_game() -> void:
 		_resource_spawner.spawn_resources()
 	_clear_units()
 	_reset_bases()
-	_base_upgrade_in_progress = false
-	_game_over = false
-	_game_over_panel.visible = false
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
+	_upgrade_manager.base_upgrade_in_progress = false
+	_game_state_manager.reset()
+	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 	_economy.set_base_upgrade_in_progress(false)
 	_enemy_timer.start()
 	queue_redraw()
@@ -495,14 +501,12 @@ func _reset_for_play() -> void:
 	_clear_constructions()
 	_clear_buildings()
 	_reset_bases()
-	_base_upgrade_in_progress = false
-	_game_over = false
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
-	_set_upgrade_modal_visible(false)
+	_upgrade_manager.base_upgrade_in_progress = false
+	_game_state_manager.reset()
+	_upgrade_manager.set_upgrade_modal_visible(false)
 	if _economy != null:
 		_economy.configure_resources(starting_wood, starting_food, starting_stone, starting_iron, base_resource_cap, unit_food_cost)
-		_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
+		_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
 		_economy.set_base_upgrade_in_progress(false)
 	if _enemy_timer != null:
 		_enemy_timer.start()
@@ -564,49 +568,16 @@ func _update_base_label() -> void:
 	if _base_label != null:
 		_base_label.text = _base_label_text()
 	_update_upgrade_button_text()
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
-	_economy.set_base_upgrade_in_progress(_base_upgrade_in_progress)
-	_update_base_upgrade_indicator()
-	_economy.set_archery_level(_archery_range_level)
-
-func _set_splash_active(active: bool) -> void:
-	_splash_active = active
-	if _hud_root != null:
-		_hud_root.visible = not active
-	if _splash_panel != null:
-		_splash_panel.visible = active
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
-	if _enemy_timer != null:
-		if active:
-			_enemy_timer.stop()
-		else:
-			_enemy_timer.start()
-	if active:
-		_set_fast_forward(false)
-		_set_paused(false)
-		_set_upgrade_modal_visible(false)
-
-func _set_paused(active: bool) -> void:
-	if _game_over:
-		return
-	_paused = active
-	if _pause_panel != null:
-		_pause_panel.visible = active
-	get_tree().paused = active
-	if _enemy_timer != null:
-		if active:
-			_enemy_timer.stop()
-		else:
-			_enemy_timer.start()
-	if active:
-		_set_upgrade_modal_visible(false)
+	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
+	_economy.set_base_upgrade_in_progress(_upgrade_manager.base_upgrade_in_progress)
+	_upgrade_manager.update_base_upgrade_indicator()
+	_economy.set_archery_level(_upgrade_manager.archery_range_level)
 
 func _base_label_text() -> String:
-	return "Base L%d | Zone: %d" % [_base_level, player_zone_width]
+	return "Base L%d | Zone: %d" % [_upgrade_manager.base_level, player_zone_width]
 
 func _upgrade_button_text() -> String:
-	if _base_level >= 2:
+	if _upgrade_manager.base_level >= 2:
 		return "Upgrade Base (100 Wood + 100 Stone)"
 	return "Upgrade Base (100 Wood)"
 
@@ -632,279 +603,24 @@ func _set_build_mode(mode: String) -> void:
 			button.release_focus()
 
 func _show_upgrade_modal(kind: String, target: Node2D) -> void:
-	if _upgrade_modal == null:
-		return
-	_upgrade_modal_type = kind
-	_upgrade_modal_target = target
-	_set_upgrade_modal_visible(true)
-	_update_upgrade_modal()
+	_upgrade_manager.show_upgrade_modal(kind, target)
 
 func _set_upgrade_modal_visible(visible: bool) -> void:
-	if _upgrade_modal != null:
-		_upgrade_modal.visible = visible
-	if not visible:
-		_upgrade_modal_type = ""
-		_upgrade_modal_target = null
+	_upgrade_manager.set_upgrade_modal_visible(visible)
 
 func _update_upgrade_modal() -> void:
-	if _upgrade_modal == null or not _upgrade_modal.visible:
-		return
-	if _upgrade_modal_type == "base":
-		_upgrade_modal_title.text = "Upgrade Base"
-		_upgrade_modal_level.text = "Level: %d / %d" % [_base_level, _base_max_level()]
-		_upgrade_modal_cost.text = "Cost: %s" % _base_upgrade_cost_text()
-		_upgrade_modal_unlocks.text = "Unlocks: %s" % _base_upgrade_unlocks()
-		_upgrade_modal_button.disabled = not _can_upgrade_base()
-	elif _upgrade_modal_type == "archery_range":
-		var range := _upgrade_modal_target
-		var level_value := 1
-		if range != null and is_instance_valid(range) and range.get("level") != null:
-			level_value = int(range.get("level"))
-		_upgrade_modal_title.text = "Upgrade Archery Range"
-		_upgrade_modal_level.text = "Level: %d / %d" % [level_value, 2]
-		_upgrade_modal_cost.text = "Cost: %dW %dS" % [archery_range_upgrade_cost, archery_range_upgrade_stone_cost]
-		_upgrade_modal_unlocks.text = "Unlocks: Archer, Archer Tower"
-		_upgrade_modal_button.disabled = not _can_upgrade_archery(range)
-	else:
-		_upgrade_modal_title.text = "Upgrade"
-		_upgrade_modal_level.text = "Level: -"
-		_upgrade_modal_cost.text = "Cost: -"
-		_upgrade_modal_unlocks.text = "Unlocks: -"
-		_upgrade_modal_button.disabled = true
-
-func _base_max_level() -> int:
-	if base_upgrade_times.is_empty():
-		return 1
-	return base_upgrade_times.size() + 1
-
-func _base_upgrade_cost_text() -> String:
-	if _base_level >= 2:
-		return "%dW %dS" % [base_upgrade_cost, base_upgrade_stone_cost]
-	return "%dW" % base_upgrade_cost
-
-func _base_upgrade_unlocks() -> String:
-	if _base_level == 1:
-		return "Stonecutter, Archery Range, Stone Storage, Stone Thrower"
-	if _base_level == 2:
-		return "Iron Miner, Iron Storage"
-	if _base_level >= 3:
-		return "More build radius"
-	return "-"
-
-func _can_upgrade_base() -> bool:
-	if _base_end == null:
-		return false
-	if _base_upgrade_in_progress:
-		return false
-	if _base_level >= _base_max_level():
-		return false
-	if not _economy.can_afford_wood(base_upgrade_cost):
-		return false
-	if _base_level >= 2 and _economy.stone < base_upgrade_stone_cost:
-		return false
-	return true
-
-func _can_upgrade_archery(range: Node2D) -> bool:
-	if range == null or not is_instance_valid(range):
-		return false
-	if _archery_range_level >= 2:
-		return false
-	if range.get("upgrade_in_progress") == true:
-		return false
-	if not _economy.can_afford_wood(archery_range_upgrade_cost):
-		return false
-	if _economy.stone < archery_range_upgrade_stone_cost:
-		return false
-	return true
+	_upgrade_manager.update_upgrade_modal()
 
 func _on_upgrade_base_pressed() -> void:
 	_show_upgrade_modal("base", _base_end)
 
-func _try_upgrade_base() -> void:
-	if not _can_upgrade_base():
-		return
-	_economy.spend_wood(base_upgrade_cost)
-	if _base_level >= 2:
-		_economy.spend_stone(base_upgrade_stone_cost)
-	_base_upgrade_in_progress = true
-	_economy.set_base_upgrade_in_progress(true)
-	var top_left := _base_end_cell + Vector2i(-1, -1)
-	var duration := _base_upgrade_duration()
-	var construction = _spawn_construction(top_left, 3, duration)
-	construction.completed.connect(_finish_base_upgrade)
-
-func _base_upgrade_duration() -> float:
-	if base_upgrade_times.is_empty():
-		return 0.0
-	var index: int = max(_base_level - 1, 0)
-	if index >= base_upgrade_times.size():
-		index = base_upgrade_times.size() - 1
-	return base_upgrade_times[index]
-
-func _finish_base_upgrade() -> void:
-	_base_level += 1
-	player_zone_width += zone_upgrade_amount
-	_base_end.upgrade(base_hp_upgrade)
-	_base_upgrade_in_progress = false
-	_update_base_label()
-	_update_enemy_spawn_rate()
-	_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
-	_economy.set_base_upgrade_in_progress(false)
-	_update_base_upgrade_indicator()
-	_economy.set_archery_level(_archery_range_level)
-
 func _generate_random_path() -> void:
-	path_cells = []
-	var start_x: int = path_margin
-	var end_x: int = grid_width - 1 - path_margin
-	if end_x <= start_x or grid_height <= 0:
+	if _path_generator == null:
 		return
-
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	if random_seed == 0:
-		rng.randomize()
-	else:
-		rng.seed = random_seed
-
-	var attempt: int = 0
-	while attempt < path_generation_attempts:
-		_pick_base_cells(rng, start_x, end_x)
-		if _base_start_cell == Vector2i(-1, -1) or _base_end_cell == Vector2i(-1, -1):
-			attempt += 1
-			continue
-
-		var start: Vector2i = _base_start_cell
-		var current: Vector2i = start
-		var last_dir: Vector2i = Vector2i(1, 0)
-		var vertical_streak: int = 0
-
-		var path: Array[Vector2i] = []
-		var visited: Dictionary[Vector2i, bool] = {}
-		path.append(current)
-		visited[current] = true
-
-		var max_steps: int = grid_width * grid_height * 10
-		var steps: int = 0
-
-		while steps < max_steps:
-			if current == _base_end_cell:
-				path_cells = path
-				return
-
-			var candidates: Array[Vector2i] = _get_walk_candidates(current, start_x, end_x, visited, vertical_streak)
-			if candidates.is_empty():
-				if path.size() <= 1:
-					break
-				visited.erase(current)
-				path.pop_back()
-				current = path[path.size() - 1]
-				vertical_streak = 0
-				steps += 1
-				continue
-
-			var next: Vector2i = _choose_weighted_candidate(candidates, current, last_dir, rng)
-			var dir: Vector2i = next - current
-			if dir.y != 0:
-				vertical_streak += 1
-			else:
-				vertical_streak = 0
-			last_dir = dir
-			current = next
-			path.append(current)
-			visited[current] = true
-			steps += 1
-
-		attempt += 1
-
-	path_cells = _fallback_straight_path(_base_start_cell, _base_end_cell)
-
-func _get_walk_candidates(
-	current: Vector2i,
-	start_x: int,
-	end_x: int,
-	visited: Dictionary[Vector2i, bool],
-	vertical_streak: int
-) -> Array[Vector2i]:
-	var candidates: Array[Vector2i] = []
-	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0)]
-	var band := _base_band_bounds()
-	for dir in dirs:
-		if dir == Vector2i(-1, 0) and path_length_multiplier <= 1.0:
-			continue
-		if dir.y != 0 and vertical_streak >= path_max_vertical_step:
-			continue
-		var next: Vector2i = current + dir
-		if next.x < start_x or next.x > end_x:
-			continue
-		if restrict_path_to_base_band:
-			if next.y < band.x or next.y > band.y:
-				continue
-		if next.y < 0 or next.y >= grid_height:
-			continue
-		if visited.has(next):
-			continue
-		candidates.append(next)
-	return candidates
-
-func _choose_weighted_candidate(
-	candidates: Array[Vector2i],
-	current: Vector2i,
-	last_dir: Vector2i,
-	rng: RandomNumberGenerator
-) -> Vector2i:
-	var weights: Array[float] = []
-	var total: float = 0.0
-	for candidate in candidates:
-		var dir: Vector2i = candidate - current
-		var weight: float = _direction_weight(dir, last_dir)
-		weights.append(weight)
-		total += weight
-	var pick: float = rng.randf() * total
-	var acc: float = 0.0
-	for i in range(candidates.size()):
-		acc += weights[i]
-		if pick <= acc:
-			return candidates[i]
-	return candidates[0]
-
-func _direction_weight(dir: Vector2i, last_dir: Vector2i) -> float:
-	var right_weight: float = lerp(2.0, 5.0, path_straightness)
-	var vert_weight: float = lerp(2.5, 0.6, path_straightness) * maxf(1.0, path_length_multiplier)
-	var left_weight: float = 0.0
-	if path_length_multiplier > 1.0:
-		left_weight = lerp(0.8, 0.1, path_straightness)
-
-	var base: float = 0.01
-	if dir == Vector2i(1, 0):
-		base = right_weight
-	elif dir == Vector2i(-1, 0):
-		base = left_weight
-	else:
-		base = vert_weight
-
-	var straight_bonus: float = 1.0
-	if dir == last_dir:
-		straight_bonus += path_straightness
-	return maxf(0.01, base * straight_bonus)
-
-func _fallback_straight_path(start: Vector2i, goal: Vector2i) -> Array[Vector2i]:
-	var path: Array[Vector2i] = []
-	var current := start
-	path.append(current)
-	while current.y != goal.y:
-		current = Vector2i(current.x, current.y + signi(goal.y - current.y))
-		path.append(current)
-	while current.x != goal.x:
-		current = Vector2i(current.x + signi(goal.x - current.x), current.y)
-		path.append(current)
-	return path
-
-func _pick_base_cells(rng: RandomNumberGenerator, start_x: int, end_x: int) -> void:
-	var band := _base_band_bounds()
-	var start_y := rng.randi_range(band.x, band.y)
-	var end_y := rng.randi_range(band.x, band.y)
-	_base_start_cell = Vector2i(start_x, start_y)
-	_base_end_cell = Vector2i(end_x, end_y)
+	var result: Dictionary = _path_generator.generate_random_path()
+	path_cells = result.get("path", [])
+	_base_start_cell = result.get("start", Vector2i(-1, -1))
+	_base_end_cell = result.get("end", Vector2i(-1, -1))
 
 func _is_in_bounds(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.y >= 0 and cell.x < grid_width and cell.y < grid_height
@@ -920,15 +636,15 @@ func _draw() -> void:
 		_draw_editor_bases()
 	_draw_grid()
 	if _editor_active:
-		_draw_editor_hover()
+		_map_editor.draw(self)
 	if _placement != null:
 		_placement.draw_hover(self, _build_mode)
 
 func _draw_grid() -> void:
 	var grid_color := Color(0.2, 0.2, 0.2)
 	var zoom := 1.0
-	if _camera != null:
-		zoom = _camera.zoom.x
+	if _camera_controller != null:
+		zoom = _camera_controller.get_zoom()
 	var line_width := maxf(1.0, 1.0 / zoom)
 	for x in range(grid_width + 1):
 		var from := Vector2(x * cell_size, 0)
@@ -986,62 +702,22 @@ func _cell_to_world(cell: Vector2i) -> Vector2:
 	return Vector2(cell.x * cell_size + cell_size * 0.5, cell.y * cell_size + cell_size * 0.5)
 
 func _get_archery_range_at(world_pos: Vector2) -> Node2D:
-	for range in _archery_ranges:
-		if range == null or not is_instance_valid(range):
-			continue
-		var size := cell_size * 3.0
-		var local := world_pos - range.position
-		if local.x >= 0.0 and local.y >= 0.0 and local.x <= size and local.y <= size:
-			return range
-	return null
+	return _upgrade_manager.get_archery_range_at(world_pos)
 
 func _try_upgrade_archery_range(range: Node2D) -> void:
-	if not _can_upgrade_archery(range):
-		return
-	_economy.spend_wood(archery_range_upgrade_cost)
-	_economy.spend_stone(archery_range_upgrade_stone_cost)
-	range.set("upgrade_in_progress", true)
-	var top_left: Vector2i = range.get("cell")
-	var construction = _spawn_construction(top_left, 3, archery_range_upgrade_time)
-	construction.completed.connect(Callable(self, "_finish_archery_range_upgrade").bind(range))
-
-func _finish_archery_range_upgrade(range: Node2D) -> void:
-	if range == null or not is_instance_valid(range):
-		return
-	range.set("upgrade_in_progress", false)
-	if range.has_method("upgrade"):
-		range.call("upgrade")
-	_archery_range_level = max(_archery_range_level, 2)
-	_economy.set_archery_level(_archery_range_level)
-	_update_archery_range_indicators()
+	_upgrade_manager.try_upgrade_archery_range(range)
 
 func _update_archery_range_indicators() -> void:
-	for range in _archery_ranges:
-		if range == null or not is_instance_valid(range):
-			continue
-		var show: bool = _archery_range_level < 2 and range.get("upgrade_in_progress") != true
-		var can_upgrade: bool = _can_upgrade_archery(range)
-		if range.has_method("set_upgrade_indicator"):
-			var cost_text := "%dW %dS" % [archery_range_upgrade_cost, archery_range_upgrade_stone_cost]
-			range.call("set_upgrade_indicator", show, can_upgrade, cost_text)
+	_upgrade_manager.update_archery_range_indicators()
+
+func _update_base_upgrade_indicator() -> void:
+	_upgrade_manager.update_base_upgrade_indicator()
 
 func _register_archery_range(range: Node2D) -> void:
-	_archery_ranges.append(range)
-	var level_value: int = 1
-	if range.get("level") != null:
-		level_value = int(range.get("level"))
-	_archery_range_level = max(_archery_range_level, level_value)
-	if _economy != null:
-		_economy.set_archery_level(_archery_range_level)
-	_update_archery_range_indicators()
+	_upgrade_manager.register_archery_range(range)
 
 func _register_barracks(barracks: Node2D) -> void:
-	if barracks == null:
-		return
-	_barracks_level = max(_barracks_level, 1)
-	if _economy != null:
-		_economy.set_barracks_level(_barracks_level)
-		_economy.update_buttons_for_base_level(_base_level, _archery_range_level, _barracks_level)
+	_upgrade_manager.register_barracks(barracks)
 
 func _is_over_player_base(world_pos: Vector2) -> bool:
 	if _base_end == null:
@@ -1049,14 +725,6 @@ func _is_over_player_base(world_pos: Vector2) -> bool:
 	var half := _base_end.size * 0.5
 	var local := world_pos - _base_end.position
 	return absf(local.x) <= half and absf(local.y) <= half
-
-func _update_base_upgrade_indicator() -> void:
-	if _base_end == null:
-		return
-	var can_upgrade := _can_upgrade_base()
-	var show := not _base_upgrade_in_progress and _base_level < _base_max_level()
-	var cost_text := _base_upgrade_cost_text()
-	_base_end.set_upgrade_indicator(show, can_upgrade, cost_text)
 
 func _spawn_construction(top_left: Vector2i, size: int, duration: float) -> Node2D:
 	var ConstructionScript: Script = load("res://scripts/Construction.gd")
@@ -1105,54 +773,13 @@ func _setup_enemy_timer() -> void:
 func _update_enemy_spawn_rate() -> void:
 	if _enemy_timer == null:
 		return
-	var multiplier: float = 2.0 if _base_level >= 2 else 1.0
+	var multiplier: float = 2.0 if _upgrade_manager.base_level >= 2 else 1.0
 	_enemy_timer.wait_time = spawn_interval / multiplier
 
-func _setup_camera() -> void:
-	_camera = Camera2D.new()
-	_camera_target = Vector2(grid_width * cell_size * 0.5, grid_height * cell_size * 0.5)
-	_camera.position = _camera_target
-	add_child(_camera)
-	_camera.make_current()
-	_update_camera_zoom()
-	get_viewport().size_changed.connect(_update_camera_zoom)
-
-func _update_camera_zoom() -> void:
-	var viewport_size: Vector2 = get_viewport_rect().size
-	var world_size: Vector2 = Vector2(grid_width * cell_size, grid_height * cell_size)
-	if world_size.x <= 0 or world_size.y <= 0:
-		return
-	var zoom_scale: float = minf(viewport_size.x / world_size.x, viewport_size.y / world_size.y)
-	if zoom_scale <= 0.0:
-		return
-	_camera_zoom = clampf(zoom_scale, 0.15, 1.5)
-	_camera.zoom = Vector2(_camera_zoom, _camera_zoom)
-
-func _update_camera_controls(delta: float) -> void:
-	if _camera == null:
-		return
-	if _editor_active:
-		var focus := get_viewport().gui_get_focus_owner()
-		if focus is LineEdit:
-			return
-	var speed := 600.0
-	var input := Vector2.ZERO
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		input.y -= 1.0
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		input.y += 1.0
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		input.x -= 1.0
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		input.x += 1.0
-	if input != Vector2.ZERO:
-		_camera_target += input.normalized() * speed * delta
-	_camera.position = _camera_target
-
 func _spawn_enemy() -> void:
-	if _splash_active:
+	if _game_state_manager.is_splash_active():
 		return
-	if _game_over:
+	if _game_state_manager.is_game_over():
 		return
 	if not _path_valid:
 		return
@@ -1178,65 +805,56 @@ func _on_unit_removed(unit: Node2D) -> void:
 	_economy.on_unit_removed()
 
 func _on_base_died(is_player_base: bool) -> void:
-	if _game_over:
-		return
-	_game_over = true
-	_enemy_timer.stop()
-	_set_upgrade_modal_visible(false)
-	for button in _spawn_buttons.values():
-		var node := button as Button
-		if node != null:
-			node.disabled = true
-	_game_over_panel.visible = true
-	_game_over_label.text = "You Lose" if is_player_base else "You Win"
+	_game_state_manager.on_game_over(is_player_base)
 
 func _on_restart_pressed() -> void:
 	get_tree().reload_current_scene.call_deferred()
 
 func _on_play_pressed() -> void:
-	_set_splash_active(false)
+	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
 	_set_upgrade_modal_visible(false)
 	var map_name := _get_selected_map_name()
 	if map_name != "":
 		var MapIOScript: Script = load("res://scripts/MapIO.gd")
 		var data: Dictionary = MapIOScript.call("load_map", map_name)
-		if not data.is_empty() and _apply_map_data(data):
-			_map_data = data
-			_use_custom_map = true
+		if not data.is_empty() and _map_editor.apply_map_data(data):
+			_map_editor.map_data = data
+			_map_editor.use_custom_map = true
 			_reset_for_play()
 			return
-	if _use_custom_map and not _map_data.is_empty():
-		_apply_map_data(_map_data)
+	if _map_editor.use_custom_map and not _map_editor.map_data.is_empty():
+		_map_editor.apply_map_data(_map_editor.map_data)
 		_reset_for_play()
 	else:
 		_reset_game()
 
 func _on_resume_pressed() -> void:
-	_set_paused(false)
+	_game_state_manager.set_paused(false)
 
 func _on_menu_pressed() -> void:
-	_set_paused(not _paused)
+	_game_state_manager.set_paused(not _game_state_manager.is_paused())
 
 func _on_speed_pressed() -> void:
-	_set_fast_forward(not _fast_forward)
+	_game_state_manager.set_fast_forward(not _game_state_manager.is_fast_forward())
 
 func _on_upgrade_modal_pressed() -> void:
-	if _upgrade_modal_type == "base":
-		_try_upgrade_base()
-	elif _upgrade_modal_type == "archery_range":
-		var range := _upgrade_modal_target
-		if range != null and is_instance_valid(range):
-			_try_upgrade_archery_range(range)
-	_update_upgrade_modal()
+	var modal_type: String = _upgrade_manager.get_upgrade_modal_type()
+	if modal_type == "base":
+		_upgrade_manager.try_upgrade_base()
+	elif modal_type == "archery_range":
+		var range_target: Node2D = _upgrade_manager.get_upgrade_modal_target()
+		if range_target != null and is_instance_valid(range_target):
+			_upgrade_manager.try_upgrade_archery_range(range_target)
+	_upgrade_manager.update_upgrade_modal()
 
 func _on_upgrade_modal_close_pressed() -> void:
 	_set_upgrade_modal_visible(false)
 
 func _on_create_map_pressed() -> void:
-	_set_splash_active(false)
+	_game_state_manager.set_splash_active(false)
 	_set_editor_active(true)
-	_start_new_map()
+	_map_editor.start_new_map()
 
 func _on_editor_tool_pressed(tool: String) -> void:
 	_set_editor_tool(tool)
@@ -1245,7 +863,7 @@ func _on_editor_save_pressed() -> void:
 	if _editor_name_input == null:
 		return
 	var name := _editor_name_input.text.strip_edges()
-	var data := _build_map_data()
+	var data: Dictionary = _map_editor.build_map_data()
 	if data.is_empty():
 		_set_editor_status("Map needs path + bases before saving.")
 		return
@@ -1263,8 +881,8 @@ func _on_editor_save_pressed() -> void:
 	var MapIOScript: Script = load("res://scripts/MapIO.gd")
 	var ok: bool = MapIOScript.call("save_map", name, data)
 	if ok:
-		_map_data = data
-		_use_custom_map = true
+		_map_editor.map_data = data
+		_map_editor.use_custom_map = true
 		_refresh_map_list(name)
 		_set_editor_status("Saved: %s" % name)
 	else:
@@ -1279,204 +897,44 @@ func _on_editor_load_pressed() -> void:
 	if data.is_empty():
 		_set_editor_status("Load failed.")
 		return
-	if _apply_map_data(data):
-		_map_data = data
-		_use_custom_map = true
+	if _map_editor.apply_map_data(data):
+		_map_editor.map_data = data
+		_map_editor.use_custom_map = true
 		_refresh_map_list(name)
 		_set_editor_status("Loaded: %s" % name)
 	else:
 		_set_editor_status("Invalid map data.")
 
 func _on_editor_back_pressed() -> void:
-	_map_data = _build_map_data()
-	_use_custom_map = not _map_data.is_empty()
+	_map_editor.map_data = _map_editor.build_map_data()
+	_map_editor.use_custom_map = not _map_editor.map_data.is_empty()
 	_set_editor_active(false)
-	_set_splash_active(true)
+	_game_state_manager.set_splash_active(true)
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
 
 func _set_editor_active(active: bool) -> void:
 	_editor_active = active
-	if _editor_panel != null:
-		_editor_panel.visible = active
-	if _hud_root != null:
-		_hud_root.visible = not active
-	if _game_over_panel != null:
-		_game_over_panel.visible = false
-	if _enemy_timer != null:
-		if active:
-			_enemy_timer.stop()
-		else:
-			_enemy_timer.start()
-	if active:
-		_set_paused(false)
-		_set_fast_forward(false)
-		_clear_units()
-		_clear_constructions()
-		_clear_buildings()
-		_clear_enemy_towers()
-		if _resource_spawner != null:
-			_resource_spawner.clear_resources()
-		_clear_bases()
-		queue_redraw()
+	_map_editor.set_active(active)
 
 func _set_editor_tool(tool: String) -> void:
-	_editor_tool = tool
-	_update_editor_tool_label()
+	_map_editor.set_tool(tool)
 
 func _update_editor_tool_label() -> void:
-	if _editor_tool_label != null:
-		var name := _editor_tool.capitalize()
-		if _editor_tool == "base_start":
-			name = "Player Base"
-		elif _editor_tool == "base_end":
-			name = "Enemy Base"
-		elif _is_resource_tool(_editor_tool):
-			var def: Dictionary = _resource_defs.get(_editor_tool, {})
-			name = str(def.get("label", _editor_tool))
-		_editor_tool_label.text = "Tool: %s" % name
+	_map_editor.update_tool_label()
 
 func _set_editor_status(text: String) -> void:
-	if _editor_status_label != null:
-		_editor_status_label.text = text
+	_map_editor.set_status(text)
 
 func _refresh_map_list(select_name: String = "") -> void:
-	var MapIOScript: Script = load("res://scripts/MapIO.gd")
-	var names: Array = MapIOScript.call("list_maps")
-	_map_list.clear()
-	if names != null:
-		for entry in names:
-			if entry is String:
-				_map_list.append(entry)
-	if _splash_map_select == null:
-		return
-	_splash_map_select.clear()
-	_splash_map_select.add_item("Random")
-	for name in _map_list:
-		_splash_map_select.add_item(name)
-	if select_name != "" and _map_list.has(select_name):
-		var index := _map_list.find(select_name)
-		_splash_map_select.select(index + 1)
-	else:
-		_splash_map_select.select(0)
+	_map_editor.refresh_map_list(select_name)
 
 func _get_selected_map_name() -> String:
-	if _splash_map_select == null:
-		return ""
-	var idx := _splash_map_select.get_selected_id()
-	if idx <= 0:
-		return ""
-	var index := idx - 1
-	if index >= 0 and index < _map_list.size():
-		return _map_list[index]
-	return ""
-
-func _handle_editor_click(world_pos: Vector2) -> void:
-	var cell := Vector2i(int(world_pos.x / cell_size), int(world_pos.y / cell_size))
-	if not _is_in_bounds(cell):
-		return
-	if _editor_tool == "path":
-		if _resource_cell_has_any(cell):
-			return
-		if not path_cells.has(cell):
-			path_cells.append(cell)
-		_rebuild_path()
-		queue_redraw()
-		return
-	if _editor_tool == "erase":
-		if _resource_spawner != null:
-			if _resource_spawner.remove_resource_at(cell):
-				queue_redraw()
-				return
-		if _remove_enemy_tower_at(cell):
-			queue_redraw()
-			return
-		if path_cells.has(cell):
-			path_cells.erase(cell)
-			_rebuild_path()
-			queue_redraw()
-			return
-		if _base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_base_start_cell, cell):
-			_base_start_cell = Vector2i(-1, -1)
-		if _base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_base_end_cell, cell):
-			_base_end_cell = Vector2i(-1, -1)
-		if _base_start_cell == Vector2i(-1, -1) or _base_end_cell == Vector2i(-1, -1):
-			_rebuild_path()
-			queue_redraw()
-		return
-	if _editor_tool == "base_start" or _editor_tool == "base_end":
-		if not _can_place_base(cell, _editor_tool):
-			return
-		if _editor_tool == "base_start":
-			_base_end_cell = cell
-		else:
-			_base_start_cell = cell
-		if not path_cells.has(cell):
-			path_cells.append(cell)
-		_rebuild_path()
-		queue_redraw()
-		return
-	if _editor_tool == "enemy_tower":
-		if not _can_place_enemy_tower(cell):
-			return
-		_place_enemy_tower(cell)
-		queue_redraw()
-		return
-	if _is_resource_tool(_editor_tool):
-		if _resource_spawner == null:
-			return
-		var placed := false
-		placed = _resource_spawner.place_resource(_editor_tool, cell)
-		if placed:
-			queue_redraw()
-		return
-
-func _handle_editor_drag(world_pos: Vector2) -> void:
-	if _editor_tool != "path" and _editor_tool != "erase":
-		return
-	var cell := Vector2i(int(world_pos.x / cell_size), int(world_pos.y / cell_size))
-	if cell == _editor_last_cell:
-		return
-	_editor_last_cell = cell
-	_handle_editor_click(world_pos)
-
-func _can_place_base(center: Vector2i, kind: String) -> bool:
-	if kind == "base_start" and not _is_in_player_zone(center):
-		return false
-	for dy in range(-1, 2):
-		for dx in range(-1, 2):
-			var cell := Vector2i(center.x + dx, center.y + dy)
-			if not _is_in_bounds(cell):
-				return false
-			if _resource_cell_has_any(cell):
-				return false
-			if path_cells.has(cell) and cell != center:
-				return false
-			if _base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_base_start_cell, cell):
-				return false
-			if _base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_base_end_cell, cell):
-				return false
-	return true
+	return _map_editor.get_selected_map_name()
 
 func _is_in_enemy_zone(cell: Vector2i) -> bool:
 	return cell.x < min(player_zone_width, grid_width)
-
-func _is_in_base_area(center: Vector2i, cell: Vector2i) -> bool:
-	return abs(center.x - cell.x) <= 1 and abs(center.y - cell.y) <= 1
-
-func _can_place_enemy_tower(cell: Vector2i) -> bool:
-	if not _is_in_bounds(cell):
-		return false
-	if _is_base_cell(cell):
-		return false
-	if path_cells.has(cell):
-		return false
-	if _resource_cell_has_any(cell):
-		return false
-	if _enemy_tower_by_cell.has(cell):
-		return false
-	return true
 
 func _place_enemy_tower(cell: Vector2i) -> void:
 	var script: Script = load("res://scripts/EnemyTower.gd")
@@ -1497,119 +955,6 @@ func _remove_enemy_tower_at(cell: Vector2i) -> bool:
 		tower.queue_free()
 	return true
 
-func _draw_editor_hover() -> void:
-	if _editor_tool == "base_start" or _editor_tool == "base_end":
-		var cell := _mouse_cell()
-		if not _is_in_bounds(cell):
-			return
-		var valid := _can_place_base(cell, _editor_tool)
-		_draw_editor_square(cell, 3, valid)
-	elif _editor_tool == "path":
-		var cell := _mouse_cell()
-		if not _is_in_bounds(cell):
-			return
-		if _resource_cell_has_any(cell):
-			return
-		_draw_editor_square(cell, 1, true)
-	elif _is_resource_tool(_editor_tool):
-		var cell := _mouse_cell()
-		if not _is_in_bounds(cell):
-			return
-		var valid := true
-		if _resource_cell_has_any(cell):
-			valid = false
-		if path_cells.has(cell) or _is_base_cell(cell):
-			valid = false
-		_draw_editor_square_top_left(cell, 2, valid)
-	elif _editor_tool == "enemy_tower":
-		var cell := _mouse_cell()
-		if not _is_in_bounds(cell):
-			return
-		var valid := _can_place_enemy_tower(cell)
-		_draw_editor_square(cell, 1, valid)
-	elif _editor_tool == "erase":
-		var cell := _mouse_cell()
-		if not _is_in_bounds(cell):
-			return
-		var valid := _resource_cell_has_any(cell) or path_cells.has(cell) or _is_base_cell(cell) or _enemy_tower_by_cell.has(cell)
-		_draw_editor_square(cell, 1, valid)
-
-func _is_resource_tool(tool: String) -> bool:
-	return _resource_defs.has(tool)
-
-func _mouse_cell() -> Vector2i:
-	var world_pos := get_global_mouse_position()
-	return Vector2i(int(world_pos.x / cell_size), int(world_pos.y / cell_size))
-
-func _draw_editor_square(center: Vector2i, size_cells: int, valid: bool) -> void:
-	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
-	var half := int(floor(size_cells / 2.0))
-	for dx in range(-half, -half + size_cells):
-		for dy in range(-half, -half + size_cells):
-			var cell := Vector2i(center.x + dx, center.y + dy)
-			if not _is_in_bounds(cell):
-				continue
-			var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
-			draw_rect(rect, color, true)
-			draw_rect(rect, color.darkened(0.4), false, 2.0)
-
-func _draw_editor_square_top_left(top_left: Vector2i, size_cells: int, valid: bool) -> void:
-	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
-	for dx in range(size_cells):
-		for dy in range(size_cells):
-			var cell := Vector2i(top_left.x + dx, top_left.y + dy)
-			if not _is_in_bounds(cell):
-				continue
-			var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
-			draw_rect(rect, color, true)
-			draw_rect(rect, color.darkened(0.4), false, 2.0)
-
-func _build_map_data() -> Dictionary:
-	if _base_start_cell == Vector2i(-1, -1) or _base_end_cell == Vector2i(-1, -1):
-		return {}
-	if path_cells.is_empty():
-		return {}
-	var data := {
-		"grid_width": grid_width,
-		"grid_height": grid_height,
-		"path": _serialize_cells(path_cells),
-		"base_start": [ _base_start_cell.x, _base_start_cell.y ],
-		"base_end": [ _base_end_cell.x, _base_end_cell.y ],
-		"enemy_towers": _serialize_cells(_collect_enemy_tower_cells()),
-	}
-	for resource_id in _resource_defs.keys():
-		var def: Dictionary = _resource_defs[resource_id]
-		var map_key: String = str(def.get("map_key", resource_id))
-		data[map_key] = _serialize_cells(_collect_resource_cells(resource_id))
-	return data
-
-func _apply_map_data(data: Dictionary) -> bool:
-	if data.is_empty():
-		return false
-	grid_width = int(data.get("grid_width", grid_width))
-	grid_height = int(data.get("grid_height", grid_height))
-	path_cells = _parse_cells(data.get("path", []))
-	_base_start_cell = _parse_vec2i(data.get("base_start", []))
-	_base_end_cell = _parse_vec2i(data.get("base_end", []))
-	_clear_bases()
-	_ordered_path_cells.clear()
-	_path_valid = false
-	_rebuild_path()
-	if _resource_spawner != null:
-		var resource_cells: Dictionary = {}
-		for resource_id in _resource_defs.keys():
-			var def: Dictionary = _resource_defs[resource_id]
-			var map_key: String = str(def.get("map_key", resource_id))
-			resource_cells[resource_id] = _parse_cells(data.get(map_key, []))
-		_resource_spawner.spawn_from_cells(resource_cells)
-	_clear_enemy_towers()
-	var enemy_cells := _parse_cells(data.get("enemy_towers", []))
-	for cell in enemy_cells:
-		if _can_place_enemy_tower(cell):
-			_place_enemy_tower(cell)
-	queue_redraw()
-	return true
-
 func _collect_resource_cells(resource_id: String) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	var seen: Dictionary = {}
@@ -1626,12 +971,6 @@ func _collect_resource_cells(resource_id: String) -> Array[Vector2i]:
 		if seen.has(cell):
 			continue
 		seen[cell] = true
-		cells.append(cell)
-	return cells
-
-func _collect_enemy_tower_cells() -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	for cell in _enemy_tower_by_cell.keys():
 		cells.append(cell)
 	return cells
 
@@ -1662,21 +1001,6 @@ func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
 				return true
 	return false
 
-func _serialize_cells(cells: Array[Vector2i]) -> Array:
-	var out: Array = []
-	for cell in cells:
-		out.append([cell.x, cell.y])
-	return out
-
-func _parse_cells(raw: Array) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	for entry in raw:
-		if entry is Array and entry.size() >= 2:
-			var x: int = int(entry[0])
-			var y: int = int(entry[1])
-			cells.append(Vector2i(x, y))
-	return cells
-
 func _resource_nodes(resource_id: String) -> Array:
 	var state: Dictionary = _resource_state.get(resource_id, {})
 	return state.get("nodes", [])
@@ -1691,23 +1015,6 @@ func _resource_cell_has_any(cell: Vector2i) -> bool:
 		if map.has(cell):
 			return true
 	return false
-
-func _parse_vec2i(raw) -> Vector2i:
-	if raw is Array and raw.size() >= 2:
-		return Vector2i(int(raw[0]), int(raw[1]))
-	return Vector2i(-1, -1)
-
-func _start_new_map() -> void:
-	path_cells.clear()
-	_ordered_path_cells.clear()
-	_path_valid = false
-	_base_start_cell = Vector2i(-1, -1)
-	_base_end_cell = Vector2i(-1, -1)
-	_clear_enemy_towers()
-	if _resource_spawner != null:
-		_resource_spawner.clear_resources()
-	_clear_bases()
-	queue_redraw()
 
 func _clear_constructions() -> void:
 	for node in get_tree().get_nodes_in_group("construction"):
@@ -1725,13 +1032,7 @@ func _clear_buildings() -> void:
 	_building_by_cell.clear()
 	_occupied.clear()
 	_clear_grunt_towers()
-	_archery_ranges.clear()
-	_archery_range_level = 0
-	if _economy != null:
-		_economy.set_archery_level(_archery_range_level)
-	_barracks_level = 0
-	if _economy != null:
-		_economy.set_barracks_level(_barracks_level)
+	_upgrade_manager.reset()
 
 func _clear_grunt_towers() -> void:
 	for node in get_tree().get_nodes_in_group("grunt_towers"):
@@ -1744,15 +1045,6 @@ func _clear_enemy_towers() -> void:
 			tower.queue_free()
 	_enemy_towers.clear()
 	_enemy_tower_by_cell.clear()
-
-func _set_fast_forward(active: bool) -> void:
-	_fast_forward = active
-	Engine.time_scale = 2.0 if active else 1.0
-	_update_speed_button_text()
-
-func _update_speed_button_text() -> void:
-	if _speed_button != null:
-		_speed_button.text = "Speed x2" if _fast_forward else "Speed x1"
 
 func _get_path_points() -> Array[Vector2]:
 	var points: Array[Vector2] = []

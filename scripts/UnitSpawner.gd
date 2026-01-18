@@ -11,7 +11,7 @@ func setup(main_node: Node, economy_node: Node) -> void:
 func spawn_unit(unit_id: String, unit_def: Dictionary) -> void:
 	if main == null or economy == null:
 		return
-	if main._game_over:
+	if main._game_state_manager.is_game_over():
 		return
 	if not main._path_valid or main._ordered_path_cells.is_empty():
 		return
@@ -34,25 +34,25 @@ func _is_unlocked(unit_def: Dictionary) -> bool:
 	var requirements: Array = unit_def.get("requirements", [])
 	if requirements.is_empty():
 		var min_level: int = unit_def.get("min_base_level", 1)
-		if main._base_level < min_level:
+		if main._upgrade_manager.base_level < min_level:
 			return false
 		var requires_range: bool = unit_def.get("requires_archery_range", false)
 		var requires_upgrade: bool = unit_def.get("requires_archery_range_upgrade", false)
-		if requires_range and main._archery_range_level < 1:
+		if requires_range and main._upgrade_manager.archery_range_level < 1:
 			return false
-		if requires_upgrade and main._archery_range_level < 2:
+		if requires_upgrade and main._upgrade_manager.archery_range_level < 2:
 			return false
 		return true
 	for req in requirements:
 		if req is Dictionary:
 			var req_type: String = str(req.get("type", ""))
 			if req_type == "base_level":
-				if main._base_level < int(req.get("value", 1)):
+				if main._upgrade_manager.base_level < int(req.get("value", 1)):
 					return false
 			elif req_type == "archery_level":
-				if main._archery_range_level < int(req.get("value", 0)):
+				if main._upgrade_manager.archery_range_level < int(req.get("value", 0)):
 					return false
 			elif req_type == "barracks_level":
-				if main._barracks_level < int(req.get("value", 0)):
+				if main._upgrade_manager.barracks_level < int(req.get("value", 0)):
 					return false
 	return true

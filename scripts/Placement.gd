@@ -212,11 +212,11 @@ func _apply_building_effect(def: Dictionary, building: Node2D) -> void:
 	elif effect == "iron_storage":
 		economy.add_iron_cap(main.storage_capacity)
 	elif effect == "archery_range":
-		main._archery_range_level = max(main._archery_range_level, 1)
+		main._upgrade_manager.archery_range_level = max(main._upgrade_manager.archery_range_level, 1)
 		main._register_archery_range(building)
 	elif effect == "barracks":
 		main._register_barracks(building)
-		economy.update_buttons_for_base_level(main._base_level, main._archery_range_level, main._barracks_level)
+		economy.update_buttons_for_base_level(main._upgrade_manager.base_level, main._upgrade_manager.archery_range_level, main._upgrade_manager.barracks_level)
 
 func _place_structure(scene_path: String, top_left: Vector2i, size: int) -> Node2D:
 	var building: Node2D = load(scene_path).instantiate() as Node2D
@@ -278,26 +278,26 @@ func _requirements_met(def: Dictionary) -> bool:
 	var requirements: Array = def.get("requirements", [])
 	if requirements.is_empty():
 		var min_level: int = def.get("min_base_level", 1)
-		if main._base_level < min_level:
+		if main._upgrade_manager.base_level < min_level:
 			return false
 		var requires_range: bool = def.get("requires_archery_range", false)
 		var requires_upgrade: bool = def.get("requires_archery_range_upgrade", false)
-		if requires_range and main._archery_range_level < 1:
+		if requires_range and main._upgrade_manager.archery_range_level < 1:
 			return false
-		if requires_upgrade and main._archery_range_level < 2:
+		if requires_upgrade and main._upgrade_manager.archery_range_level < 2:
 			return false
 		return true
 	for req in requirements:
 		if req is Dictionary:
 			var req_type: String = str(req.get("type", ""))
 			if req_type == "base_level":
-				if main._base_level < int(req.get("value", 1)):
+				if main._upgrade_manager.base_level < int(req.get("value", 1)):
 					return false
 			elif req_type == "archery_level":
-				if main._archery_range_level < int(req.get("value", 0)):
+				if main._upgrade_manager.archery_range_level < int(req.get("value", 0)):
 					return false
 			elif req_type == "barracks_level":
-				if main._barracks_level < int(req.get("value", 0)):
+				if main._upgrade_manager.barracks_level < int(req.get("value", 0)):
 					return false
 	return true
 

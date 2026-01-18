@@ -8,6 +8,7 @@ extends Node2D
 signal food_produced(amount: int)
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	position = Vector2(cell.x * cell_size, cell.y * cell_size)
 	var timer := Timer.new()
 	timer.wait_time = tick_seconds
