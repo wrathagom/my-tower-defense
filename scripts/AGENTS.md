@@ -5,7 +5,8 @@ Main Flow
 - UiBuilder.gd: constructs all runtime UI nodes and hooks signals.
 - Placement.gd: build placement, hover, construction timing.
 - Economy.gd: resource counts, caps, button gating, unit limits.
-- ResourceSpawner.gd: tree/stone placement and guarantees.
+- ResourceCatalog.gd: resource registry (count, size, scene, guarantees).
+- ResourceSpawner.gd: generic resource placement/spawn logic driven by catalog defs.
 - Construction.gd: build-progress overlay and timer.
 - UnitCatalog.gd: unit registry with costs, scenes, and unlock rules.
 - UnitSpawner.gd: shared spawn logic for all units.
@@ -17,7 +18,7 @@ Units
 - Enemy.gd: enemy pathing, melee, jitter, health bar.
 
 Buildings/Objects
-- Base.gd, Tower.gd, Tree.gd, Stone.gd, storage and producer scripts.
+- Base.gd, Tower.gd, Tree.gd, Stone.gd, Iron.gd, storage and producer scripts.
 
 Notes
 - Many scripts rely on Main.gd helper methods (bounds, path cells, base cells).

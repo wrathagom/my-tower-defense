@@ -20,7 +20,7 @@ func handle_build_click(world_pos: Vector2, mode: String) -> bool:
 	if def.is_empty():
 		return false
 	var placement: String = str(def.get("placement", "grid"))
-	if placement == "tree" or placement == "stone" or placement == "iron":
+	if _is_resource_placement(placement):
 		return _try_build_resource(def, world_pos)
 	return _try_build_grid(def, world_pos)
 
@@ -45,7 +45,7 @@ func update_hover(world_pos: Vector2, mode: String) -> void:
 		main.queue_redraw()
 		return
 	var placement: String = str(def.get("placement", "grid"))
-	if placement == "tree" or placement == "stone" or placement == "iron":
+	if _is_resource_placement(placement):
 		_update_resource_hover(cell, def)
 		return
 	_update_grid_hover(cell, def)
@@ -64,9 +64,7 @@ func _update_resource_hover(cell: Vector2i, def: Dictionary) -> void:
 	hover_build_top_left = Vector2i(-1, -1)
 	hover_build_valid = false
 	var placement: String = str(def.get("placement", ""))
-	var resource_map: Dictionary = main._tree_by_cell if placement == "tree" else main._stone_by_cell
-	if placement == "iron":
-		resource_map = main._iron_by_cell
+	var resource_map: Dictionary = main._resource_map(placement)
 	if not resource_map.has(cell):
 		hover_resource_top_left = Vector2i(-1, -1)
 		hover_resource_valid = false
@@ -139,9 +137,7 @@ func _try_build_grid(def: Dictionary, world_pos: Vector2) -> bool:
 func _try_build_resource(def: Dictionary, world_pos: Vector2) -> bool:
 	var cell: Vector2i = Vector2i(int(world_pos.x / main.cell_size), int(world_pos.y / main.cell_size))
 	var placement: String = str(def.get("placement", ""))
-	var resource_map: Dictionary = main._tree_by_cell if placement == "tree" else main._stone_by_cell
-	if placement == "iron":
-		resource_map = main._iron_by_cell
+	var resource_map: Dictionary = main._resource_map(placement)
 	if not resource_map.has(cell):
 		return false
 	if not _resource_zone_ok(cell, placement):
@@ -268,11 +264,7 @@ func _can_place_structure(top_left: Vector2i, size: int) -> bool:
 				return false
 			if main._occupied.has(cell):
 				return false
-			if main._tree_by_cell.has(cell):
-				return false
-			if main._stone_by_cell.has(cell):
-				return false
-			if main._iron_by_cell.has(cell):
+			if main._resource_cell_has_any(cell):
 				return false
 			if main._enemy_tower_by_cell.has(cell):
 				return false
@@ -315,5 +307,8 @@ func _on_stone_produced(amount: int) -> void:
 
 func _on_iron_produced(amount: int) -> void:
 	economy.add_iron(amount)
+
+func _is_resource_placement(placement: String) -> bool:
+	return main != null and main._resource_defs.has(placement)
 func _resource_zone_ok(cell: Vector2i, placement: String) -> bool:
 	return main._is_in_player_zone(cell)

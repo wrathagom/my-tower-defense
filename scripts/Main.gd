@@ -124,12 +124,10 @@ var _iron_label: Label
 var _unit_label: Label
 var _economy: Node
 var _placement: Node
-var _trees: Array[Node2D] = []
-var _tree_by_cell: Dictionary = {}
-var _stones: Array[Node2D] = []
-var _stone_by_cell: Dictionary = {}
-var _irons: Array[Node2D] = []
-var _iron_by_cell: Dictionary = {}
+var _resource_catalog: Node
+var _resource_defs: Dictionary = {}
+var _resource_order: Array[String] = []
+var _resource_state: Dictionary = {}
 var _resource_spawner: ResourceSpawner
 var _building_by_cell: Dictionary = {}
 var _enemy_towers: Array[Node2D] = []
@@ -154,6 +152,7 @@ var _editor_last_cell := Vector2i(-1, -1)
 
 func _ready() -> void:
 	_setup_camera()
+	_setup_resource_catalog()
 	_setup_ui_builder()
 	_update_editor_tool_label()
 	_refresh_map_list()
@@ -318,7 +317,25 @@ func _setup_placement() -> void:
 func _setup_resource_spawner() -> void:
 	_resource_spawner = ResourceSpawner.new()
 	add_child(_resource_spawner)
-	_resource_spawner.setup(self)
+	_resource_spawner.setup(self, _resource_defs, _resource_order)
+
+func _setup_resource_catalog() -> void:
+	var ResourceCatalogScript: Script = load("res://scripts/ResourceCatalog.gd")
+	_resource_catalog = ResourceCatalogScript.new()
+	add_child(_resource_catalog)
+	_resource_defs = _resource_catalog.build_defs(self)
+	_resource_order = _resource_catalog.get_order()
+	for resource_id in _resource_defs.keys():
+		if not _resource_order.has(resource_id):
+			_resource_order.append(resource_id)
+	_resource_state.clear()
+	for resource_id in _resource_order:
+		if not _resource_defs.has(resource_id):
+			continue
+		_resource_state[resource_id] = {
+			"nodes": [],
+			"by_cell": {},
+		}
 
 func _build_build_buttons() -> void:
 	if _build_buttons_box == null:
@@ -1040,11 +1057,7 @@ func _add_path_cell(world_pos: Vector2) -> void:
 		return
 	if _occupied.has(cell):
 		return
-	if _tree_by_cell.has(cell):
-		return
-	if _stone_by_cell.has(cell):
-		return
-	if _iron_by_cell.has(cell):
+	if _resource_cell_has_any(cell):
 		return
 	if _building_by_cell.has(cell):
 		return
@@ -1219,15 +1232,17 @@ func _on_editor_save_pressed() -> void:
 	if data.is_empty():
 		_set_editor_status("Map needs path + bases before saving.")
 		return
-	if not _has_tree_in_player_zone():
-		_set_editor_status("Add at least 1 tree in the rightmost %d columns." % player_zone_width)
-		return
-	if not _has_stone_in_player_band():
-		_set_editor_status("Add at least 1 stone in the rightmost %d columns." % min(10, grid_width))
-		return
-	if not _has_iron_in_player_band():
-		_set_editor_status("Add at least 1 iron in the rightmost %d columns." % min(13, grid_width))
-		return
+	for resource_id in _resource_order:
+		if not _resource_defs.has(resource_id):
+			continue
+		var def: Dictionary = _resource_defs[resource_id]
+		var rightmost: int = int(def.get("validation_rightmost", 0))
+		if rightmost <= 0:
+			continue
+		if not _has_resource_in_zone(resource_id, "rightmost"):
+			var label: String = str(def.get("label", resource_id)).to_lower()
+			_set_editor_status("Add at least 1 %s in the rightmost %d columns." % [label, min(rightmost, grid_width)])
+			return
 	var MapIOScript: Script = load("res://scripts/MapIO.gd")
 	var ok: bool = MapIOScript.call("save_map", name, data)
 	if ok:
@@ -1300,6 +1315,9 @@ func _update_editor_tool_label() -> void:
 			name = "Player Base"
 		elif _editor_tool == "base_end":
 			name = "Enemy Base"
+		elif _is_resource_tool(_editor_tool):
+			var def: Dictionary = _resource_defs.get(_editor_tool, {})
+			name = str(def.get("label", _editor_tool))
 		_editor_tool_label.text = "Tool: %s" % name
 
 func _set_editor_status(text: String) -> void:
@@ -1342,7 +1360,7 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 	if not _is_in_bounds(cell):
 		return
 	if _editor_tool == "path":
-		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
+		if _resource_cell_has_any(cell):
 			return
 		if not path_cells.has(cell):
 			path_cells.append(cell)
@@ -1351,7 +1369,7 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 		return
 	if _editor_tool == "erase":
 		if _resource_spawner != null:
-			if _resource_spawner.remove_tree_at(cell) or _resource_spawner.remove_stone_at(cell) or _resource_spawner.remove_iron_at(cell):
+			if _resource_spawner.remove_resource_at(cell):
 				queue_redraw()
 				return
 		if _remove_enemy_tower_at(cell):
@@ -1388,16 +1406,11 @@ func _handle_editor_click(world_pos: Vector2) -> void:
 		_place_enemy_tower(cell)
 		queue_redraw()
 		return
-	if _editor_tool == "tree" or _editor_tool == "stone" or _editor_tool == "iron":
+	if _is_resource_tool(_editor_tool):
 		if _resource_spawner == null:
 			return
 		var placed := false
-		if _editor_tool == "tree":
-			placed = _resource_spawner.place_tree(cell)
-		elif _editor_tool == "stone":
-			placed = _resource_spawner.place_stone(cell)
-		else:
-			placed = _resource_spawner.place_iron(cell)
+		placed = _resource_spawner.place_resource(_editor_tool, cell)
 		if placed:
 			queue_redraw()
 		return
@@ -1419,7 +1432,7 @@ func _can_place_base(center: Vector2i, kind: String) -> bool:
 			var cell := Vector2i(center.x + dx, center.y + dy)
 			if not _is_in_bounds(cell):
 				return false
-			if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
+			if _resource_cell_has_any(cell):
 				return false
 			if path_cells.has(cell) and cell != center:
 				return false
@@ -1442,7 +1455,7 @@ func _can_place_enemy_tower(cell: Vector2i) -> bool:
 		return false
 	if path_cells.has(cell):
 		return false
-	if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
+	if _resource_cell_has_any(cell):
 		return false
 	if _enemy_tower_by_cell.has(cell):
 		return false
@@ -1478,15 +1491,15 @@ func _draw_editor_hover() -> void:
 		var cell := _mouse_cell()
 		if not _is_in_bounds(cell):
 			return
-		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell):
+		if _resource_cell_has_any(cell):
 			return
 		_draw_editor_square(cell, 1, true)
-	elif _editor_tool == "tree" or _editor_tool == "stone" or _editor_tool == "iron":
+	elif _is_resource_tool(_editor_tool):
 		var cell := _mouse_cell()
 		if not _is_in_bounds(cell):
 			return
 		var valid := true
-		if _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell):
+		if _resource_cell_has_any(cell):
 			valid = false
 		if path_cells.has(cell) or _is_base_cell(cell):
 			valid = false
@@ -1501,8 +1514,11 @@ func _draw_editor_hover() -> void:
 		var cell := _mouse_cell()
 		if not _is_in_bounds(cell):
 			return
-		var valid := _tree_by_cell.has(cell) or _stone_by_cell.has(cell) or _iron_by_cell.has(cell) or path_cells.has(cell) or _is_base_cell(cell) or _enemy_tower_by_cell.has(cell)
+		var valid := _resource_cell_has_any(cell) or path_cells.has(cell) or _is_base_cell(cell) or _enemy_tower_by_cell.has(cell)
 		_draw_editor_square(cell, 1, valid)
+
+func _is_resource_tool(tool: String) -> bool:
+	return _resource_defs.has(tool)
 
 func _mouse_cell() -> Vector2i:
 	var world_pos := get_global_mouse_position()
@@ -1542,11 +1558,12 @@ func _build_map_data() -> Dictionary:
 		"path": _serialize_cells(path_cells),
 		"base_start": [ _base_start_cell.x, _base_start_cell.y ],
 		"base_end": [ _base_end_cell.x, _base_end_cell.y ],
-		"trees": _serialize_cells(_collect_resource_cells(_trees)),
-		"stones": _serialize_cells(_collect_resource_cells(_stones)),
-		"irons": _serialize_cells(_collect_resource_cells(_irons)),
 		"enemy_towers": _serialize_cells(_collect_enemy_tower_cells()),
 	}
+	for resource_id in _resource_defs.keys():
+		var def: Dictionary = _resource_defs[resource_id]
+		var map_key: String = str(def.get("map_key", resource_id))
+		data[map_key] = _serialize_cells(_collect_resource_cells(resource_id))
 	return data
 
 func _apply_map_data(data: Dictionary) -> bool:
@@ -1562,10 +1579,12 @@ func _apply_map_data(data: Dictionary) -> bool:
 	_path_valid = false
 	_rebuild_path()
 	if _resource_spawner != null:
-		var tree_cells := _parse_cells(data.get("trees", []))
-		var stone_cells := _parse_cells(data.get("stones", []))
-		var iron_cells := _parse_cells(data.get("irons", []))
-		_resource_spawner.spawn_from_cells(tree_cells, stone_cells, iron_cells)
+		var resource_cells: Dictionary = {}
+		for resource_id in _resource_defs.keys():
+			var def: Dictionary = _resource_defs[resource_id]
+			var map_key: String = str(def.get("map_key", resource_id))
+			resource_cells[resource_id] = _parse_cells(data.get(map_key, []))
+		_resource_spawner.spawn_from_cells(resource_cells)
 	_clear_enemy_towers()
 	var enemy_cells := _parse_cells(data.get("enemy_towers", []))
 	for cell in enemy_cells:
@@ -1574,9 +1593,10 @@ func _apply_map_data(data: Dictionary) -> bool:
 	queue_redraw()
 	return true
 
-func _collect_resource_cells(nodes: Array[Node2D]) -> Array[Vector2i]:
+func _collect_resource_cells(resource_id: String) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	var seen: Dictionary = {}
+	var nodes: Array = _resource_nodes(resource_id)
 	for node in nodes:
 		if node == null or not is_instance_valid(node):
 			continue
@@ -1599,41 +1619,30 @@ func _collect_enemy_tower_cells() -> Array[Vector2i]:
 	return cells
 
 func _has_tree_in_player_zone() -> bool:
-	for tree in _trees:
-		if tree == null or not is_instance_valid(tree):
-			continue
-		var cell_value = tree.get("cell")
-		if typeof(cell_value) != TYPE_VECTOR2I:
-			continue
-		var cell: Vector2i = cell_value
-		if _is_in_player_zone(cell):
-			return true
-	return false
+	return _has_resource_in_zone("tree", "player_zone")
 
 func _has_stone_in_player_band() -> bool:
-	var min_x: int = max(grid_width - 10, 0)
-	for stone in _stones:
-		if stone == null or not is_instance_valid(stone):
-			continue
-		var cell_value = stone.get("cell")
-		if typeof(cell_value) != TYPE_VECTOR2I:
-			continue
-		var cell: Vector2i = cell_value
-		if cell.x >= min_x:
-			return true
-	return false
+	return _has_resource_in_zone("stone", "rightmost")
 
 func _has_iron_in_player_band() -> bool:
-	var min_x: int = max(grid_width - 13, 0)
-	for iron in _irons:
-		if iron == null or not is_instance_valid(iron):
+	return _has_resource_in_zone("iron", "rightmost")
+
+func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
+	var def: Dictionary = _resource_defs.get(resource_id, {})
+	var rightmost: int = int(def.get("validation_rightmost", 0))
+	for node in _resource_nodes(resource_id):
+		if node == null or not is_instance_valid(node):
 			continue
-		var cell_value = iron.get("cell")
+		var cell_value = node.get("cell")
 		if typeof(cell_value) != TYPE_VECTOR2I:
 			continue
 		var cell: Vector2i = cell_value
-		if cell.x >= min_x:
-			return true
+		if zone == "player_zone":
+			if _is_in_player_zone(cell):
+				return true
+		elif zone == "rightmost":
+			if rightmost > 0 and cell.x >= max(grid_width - rightmost, 0):
+				return true
 	return false
 
 func _serialize_cells(cells: Array[Vector2i]) -> Array:
@@ -1650,6 +1659,21 @@ func _parse_cells(raw: Array) -> Array[Vector2i]:
 			var y: int = int(entry[1])
 			cells.append(Vector2i(x, y))
 	return cells
+
+func _resource_nodes(resource_id: String) -> Array:
+	var state: Dictionary = _resource_state.get(resource_id, {})
+	return state.get("nodes", [])
+
+func _resource_map(resource_id: String) -> Dictionary:
+	var state: Dictionary = _resource_state.get(resource_id, {})
+	return state.get("by_cell", {})
+
+func _resource_cell_has_any(cell: Vector2i) -> bool:
+	for resource_id in _resource_defs.keys():
+		var map: Dictionary = _resource_map(resource_id)
+		if map.has(cell):
+			return true
+	return false
 
 func _parse_vec2i(raw) -> Vector2i:
 	if raw is Array and raw.size() >= 2:

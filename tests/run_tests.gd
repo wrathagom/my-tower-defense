@@ -14,6 +14,8 @@ func _init() -> void:
 		failed += 1
 	if not _test_building_catalog():
 		failed += 1
+	if not _test_resource_catalog():
+		failed += 1
 
 	if failed > 0:
 		print("Tests failed: %d" % failed)
@@ -66,10 +68,11 @@ func _test_path_invalid() -> bool:
 func _test_economy_caps() -> bool:
 	var EconomyScript: Script = preload("res://scripts/Economy.gd")
 	var economy: Node = EconomyScript.new()
-	economy.configure_resources(0, 0, 0, 50, 2)
+	economy.configure_resources(0, 0, 0, 0, 50, 2)
 	economy.add_wood(999)
 	economy.add_food(999)
 	economy.add_stone(999)
+	economy.add_iron(999)
 	if economy.wood != 50:
 		economy.free()
 		return false
@@ -77,6 +80,9 @@ func _test_economy_caps() -> bool:
 		economy.free()
 		return false
 	if economy.stone != 50:
+		economy.free()
+		return false
+	if economy.iron != 50:
 		economy.free()
 		return false
 	economy.add_wood_cap(50)
@@ -88,7 +94,7 @@ func _test_economy_caps() -> bool:
 func _test_unit_limits() -> bool:
 	var EconomyScript: Script = preload("res://scripts/Economy.gd")
 	var economy: Node = EconomyScript.new()
-	economy.configure_resources(0, 0, 0, 50, 2)
+	economy.configure_resources(0, 0, 0, 0, 50, 2)
 	if economy.can_spawn_unit():
 		economy.free()
 		return false
@@ -155,6 +161,31 @@ func _test_building_catalog() -> bool:
 			return false
 		var def: Dictionary = defs[building_id]
 		if str(def.get("path", "")) == "":
+			main.free()
+			catalog.free()
+			return false
+	main.free()
+	catalog.free()
+	return true
+
+func _test_resource_catalog() -> bool:
+	var ResourceCatalogScript: Script = preload("res://scripts/ResourceCatalog.gd")
+	var MainScript: Script = preload("res://scripts/Main.gd")
+	var main: Node = MainScript.new()
+	var catalog: Node = ResourceCatalogScript.new()
+	var defs: Dictionary = catalog.build_defs(main)
+	var order: Array[String] = catalog.get_order()
+	if order.is_empty():
+		main.free()
+		catalog.free()
+		return false
+	for resource_id in order:
+		if not defs.has(resource_id):
+			main.free()
+			catalog.free()
+			return false
+		var def: Dictionary = defs[resource_id]
+		if str(def.get("scene", "")) == "":
 			main.free()
 			catalog.free()
 			return false

@@ -3,339 +3,204 @@ class_name ResourceSpawner
 
 var main: Node
 var rng: RandomNumberGenerator
+var resource_defs: Dictionary = {}
+var resource_order: Array[String] = []
 
-func setup(main_node: Node) -> void:
+func setup(main_node: Node, defs: Dictionary, order: Array[String] = []) -> void:
 	main = main_node
+	resource_defs = defs
+	resource_order.clear()
+	for resource_id in order:
+		resource_order.append(resource_id)
 	rng = RandomNumberGenerator.new()
 
 func spawn_resources() -> void:
-	_clear_trees()
-	_clear_stones()
-	_clear_irons()
-	var has_tree_in_zone: bool = _spawn_trees()
-	if not has_tree_in_zone:
-		_find_any_player_zone_cell()
-	var has_stone_in_band: bool = _spawn_stones()
-	if not has_stone_in_band:
-		_find_any_stone_band_cell()
-	_spawn_irons()
+	clear_resources()
+	for resource_id in _resolved_order():
+		_spawn_resource(resource_id)
 
-func spawn_from_cells(tree_cells: Array[Vector2i], stone_cells: Array[Vector2i], iron_cells: Array[Vector2i]) -> void:
-	_clear_trees()
-	_clear_stones()
-	_clear_irons()
-	for cell in tree_cells:
-		_place_tree(cell)
-	for cell in stone_cells:
-		_place_stone(cell)
-	for cell in iron_cells:
-		_place_iron(cell)
+func spawn_from_cells(resource_cells: Dictionary) -> void:
+	clear_resources()
+	for resource_id in _resolved_order():
+		var cells: Array = resource_cells.get(resource_id, [])
+		for cell in cells:
+			if cell is Vector2i:
+				_place_resource(resource_id, cell)
 
 func clear_resources() -> void:
-	_clear_trees()
-	_clear_stones()
-	_clear_irons()
+	for resource_id in _resolved_order():
+		_clear_resource(resource_id)
 
-func place_tree(top_left: Vector2i) -> bool:
-	return _place_tree(top_left)
+func place_resource(resource_id: String, top_left: Vector2i) -> bool:
+	return _place_resource(resource_id, top_left)
 
-func place_stone(top_left: Vector2i) -> bool:
-	return _place_stone(top_left)
-
-func place_iron(top_left: Vector2i) -> bool:
-	return _place_iron(top_left)
-
-func remove_tree_at(cell: Vector2i) -> bool:
-	if not main._tree_by_cell.has(cell):
-		return false
-	var tree: Node2D = main._tree_by_cell[cell] as Node2D
-	if tree == null or not is_instance_valid(tree):
-		return false
-	var top_left: Vector2i = tree.get("cell")
-	var cells: Array[Vector2i] = [
-		top_left,
-		top_left + Vector2i(1, 0),
-		top_left + Vector2i(0, 1),
-		top_left + Vector2i(1, 1),
-	]
-	for map_cell in cells:
-		main._tree_by_cell.erase(map_cell)
-	main._trees.erase(tree)
-	tree.queue_free()
-	return true
-
-func remove_stone_at(cell: Vector2i) -> bool:
-	if not main._stone_by_cell.has(cell):
-		return false
-	var stone: Node2D = main._stone_by_cell[cell] as Node2D
-	if stone == null or not is_instance_valid(stone):
-		return false
-	var top_left: Vector2i = stone.get("cell")
-	var cells: Array[Vector2i] = [
-		top_left,
-		top_left + Vector2i(1, 0),
-		top_left + Vector2i(0, 1),
-		top_left + Vector2i(1, 1),
-	]
-	for map_cell in cells:
-		main._stone_by_cell.erase(map_cell)
-	main._stones.erase(stone)
-	stone.queue_free()
-	return true
-
-func remove_iron_at(cell: Vector2i) -> bool:
-	if not main._iron_by_cell.has(cell):
-		return false
-	var iron: Node2D = main._iron_by_cell[cell] as Node2D
-	if iron == null or not is_instance_valid(iron):
-		return false
-	var top_left: Vector2i = iron.get("cell")
-	var cells: Array[Vector2i] = [
-		top_left,
-		top_left + Vector2i(1, 0),
-		top_left + Vector2i(0, 1),
-		top_left + Vector2i(1, 1),
-	]
-	for map_cell in cells:
-		main._iron_by_cell.erase(map_cell)
-	main._irons.erase(iron)
-	iron.queue_free()
-	return true
-
-func _clear_trees() -> void:
-	for tree in main._trees:
-		if tree != null and is_instance_valid(tree):
-			tree.queue_free()
-	main._trees.clear()
-	main._tree_by_cell.clear()
-
-func _spawn_trees() -> bool:
-	if main.grid_width < 2 or main.grid_height < 2:
-		return false
-
-	_seed_rng(97)
-
-	var attempts: int = 0
-	var placed: int = 0
-	var ensured: bool = false
-	var max_attempts: int = main.tree_count * 20
-	while placed < main.tree_count and attempts < max_attempts:
-		var in_player_zone: bool = not ensured
-		var cell: Vector2i = _pick_tree_cell(in_player_zone)
-		attempts += 1
-		if cell == Vector2i(-1, -1):
+func remove_resource_at(cell: Vector2i) -> bool:
+	for resource_id in _resolved_order():
+		var map: Dictionary = main._resource_map(resource_id)
+		if not map.has(cell):
 			continue
-		if _place_tree(cell):
-			placed += 1
-			if main._is_in_player_zone(cell):
-				ensured = true
-	return ensured
+		var node: Node2D = map[cell] as Node2D
+		return _remove_resource(resource_id, node)
+	return false
 
-func _spawn_stones() -> bool:
-	if main.grid_width < 2 or main.grid_height < 2:
-		return false
+func _resolved_order() -> Array[String]:
+	if not resource_order.is_empty():
+		return resource_order
+	var order: Array[String] = []
+	for resource_id in resource_defs.keys():
+		order.append(resource_id)
+	return order
 
-	_seed_rng(181)
-
-	var attempts: int = 0
-	var placed: int = 0
-	var ensured: bool = false
-	var max_attempts: int = main.stone_count * 20
-	while placed < main.stone_count and attempts < max_attempts:
-		var require_band: bool = not ensured
-		var cell: Vector2i = _pick_stone_cell(require_band)
-		attempts += 1
-		if cell == Vector2i(-1, -1):
-			continue
-		if _place_stone(cell):
-			placed += 1
-			if main._is_in_stone_band(cell):
-				ensured = true
-	return ensured
-
-func _spawn_irons() -> void:
-	if main.grid_width < 2 or main.grid_height < 2:
+func _spawn_resource(resource_id: String) -> void:
+	var def: Dictionary = resource_defs.get(resource_id, {})
+	if def.is_empty():
 		return
-	_seed_rng(237)
+	var count: int = int(def.get("count", 0))
+	var size: int = int(def.get("size", 2))
+	if count <= 0:
+		return
+	if main.grid_width < size or main.grid_height < size:
+		return
+	_seed_rng(resource_id)
+	var ensure_zone: String = str(def.get("ensure_zone", ""))
+	var ensured: bool = ensure_zone == ""
 	var attempts: int = 0
 	var placed: int = 0
-	var max_attempts: int = main.iron_count * 20
-	while placed < main.iron_count and attempts < max_attempts:
-		var cell: Vector2i = _pick_iron_cell()
+	var max_attempts: int = count * 20
+	while placed < count and attempts < max_attempts:
+		var require_zone: bool = ensure_zone != "" and not ensured
+		var cell: Vector2i = _pick_cell(def, require_zone)
 		attempts += 1
 		if cell == Vector2i(-1, -1):
 			continue
-		if _place_iron(cell):
+		if _place_resource(resource_id, cell):
 			placed += 1
+			if require_zone and _cell_in_zone(cell, ensure_zone):
+				ensured = true
+	if ensure_zone != "" and not ensured:
+		_ensure_resource_in_zone(resource_id, def)
 
-func _clear_stones() -> void:
-	for stone in main._stones:
-		if stone != null and is_instance_valid(stone):
-			stone.queue_free()
-	main._stones.clear()
-	main._stone_by_cell.clear()
+func _clear_resource(resource_id: String) -> void:
+	var nodes: Array = main._resource_nodes(resource_id)
+	for node in nodes:
+		if node != null and is_instance_valid(node):
+			node.queue_free()
+	nodes.clear()
+	var map: Dictionary = main._resource_map(resource_id)
+	map.clear()
 
-func _clear_irons() -> void:
-	for iron in main._irons:
-		if iron != null and is_instance_valid(iron):
-			iron.queue_free()
-	main._irons.clear()
-	main._iron_by_cell.clear()
+func _remove_resource(resource_id: String, node: Node2D) -> bool:
+	if node == null or not is_instance_valid(node):
+		return false
+	var def: Dictionary = resource_defs.get(resource_id, {})
+	var size: int = int(def.get("size", 2))
+	var top_left: Vector2i = node.get("cell")
+	var map: Dictionary = main._resource_map(resource_id)
+	for x in range(size):
+		for y in range(size):
+			var cell := top_left + Vector2i(x, y)
+			map.erase(cell)
+	var nodes: Array = main._resource_nodes(resource_id)
+	nodes.erase(node)
+	node.queue_free()
+	return true
 
-func _pick_tree_cell(in_player_zone: bool) -> Vector2i:
+func _pick_cell(def: Dictionary, require_zone: bool) -> Vector2i:
+	var size: int = int(def.get("size", 2))
 	var min_x: int = 0
-	var max_x: int = main.grid_width - 2
+	var max_x: int = main.grid_width - size
 	var min_y: int = 0
-	var max_y: int = main.grid_height - 2
-	if in_player_zone:
-		min_x = max(main.grid_width - main.player_zone_width, 0)
-		max_x = max(main.grid_width - 2, 0)
+	var max_y: int = main.grid_height - size
+	if require_zone:
+		var zone: String = str(def.get("ensure_zone", ""))
+		if zone == "player_zone":
+			min_x = max(main.grid_width - main.player_zone_width, 0)
+			max_x = max(main.grid_width - size, 0)
+		elif zone == "stone_band":
+			var band: Vector2i = main._stone_band_bounds()
+			min_x = band.x
+			max_x = band.y
 	if max_x < min_x or max_y < min_y:
 		return Vector2i(-1, -1)
 	var x: int = rng.randi_range(min_x, max_x)
 	var y: int = rng.randi_range(min_y, max_y)
 	return Vector2i(x, y)
 
-func _place_tree(top_left: Vector2i) -> bool:
-	var cells: Array[Vector2i] = [
-		top_left,
-		top_left + Vector2i(1, 0),
-		top_left + Vector2i(0, 1),
-		top_left + Vector2i(1, 1),
-	]
-	for cell in cells:
-		if not main._is_in_bounds(cell):
-			return false
-		if main._is_base_cell(cell):
-			return false
-		if main._is_path_cell(cell):
-			return false
-		if main._stone_by_cell.has(cell):
-			return false
-		if main._iron_by_cell.has(cell):
-			return false
-		if main._enemy_tower_by_cell.has(cell):
-			return false
-		if main._tree_by_cell.has(cell):
-			return false
-	var tree: Node2D = preload("res://scenes/Tree.tscn").instantiate() as Node2D
-	tree.set("cell", top_left)
-	tree.set("cell_size", main.cell_size)
-	main.add_child(tree)
-	main._trees.append(tree)
-	for cell in cells:
-		main._tree_by_cell[cell] = tree
+func _place_resource(resource_id: String, top_left: Vector2i) -> bool:
+	var def: Dictionary = resource_defs.get(resource_id, {})
+	if def.is_empty():
+		return false
+	var size: int = int(def.get("size", 2))
+	if not _can_place_resource(top_left, size):
+		return false
+	var scene_path: String = str(def.get("scene", ""))
+	if scene_path == "":
+		return false
+	var node: Node2D = load(scene_path).instantiate() as Node2D
+	node.set("cell", top_left)
+	node.set("cell_size", main.cell_size)
+	main.add_child(node)
+	var nodes: Array = main._resource_nodes(resource_id)
+	nodes.append(node)
+	var map: Dictionary = main._resource_map(resource_id)
+	for x in range(size):
+		for y in range(size):
+			var cell := top_left + Vector2i(x, y)
+			map[cell] = node
 	return true
 
-func _find_any_player_zone_cell() -> bool:
-	var min_x: int = max(main.grid_width - main.player_zone_width, 0)
-	var max_x: int = max(main.grid_width - 2, 0)
-	for y in range(main.grid_height - 1):
-		for x in range(min_x, max_x + 1):
-			if _place_tree(Vector2i(x, y)):
-				return true
-	return false
+func _can_place_resource(top_left: Vector2i, size: int) -> bool:
+	for x in range(size):
+		for y in range(size):
+			var cell := top_left + Vector2i(x, y)
+			if not main._is_in_bounds(cell):
+				return false
+			if main._is_base_cell(cell):
+				return false
+			if main._is_path_cell(cell):
+				return false
+			if main._enemy_tower_by_cell.has(cell):
+				return false
+			if main._resource_cell_has_any(cell):
+				return false
+	return true
 
-func _pick_stone_cell(require_band: bool) -> Vector2i:
+func _ensure_resource_in_zone(resource_id: String, def: Dictionary) -> void:
+	var size: int = int(def.get("size", 2))
+	var zone: String = str(def.get("ensure_zone", ""))
+	var bounds: Vector2i = _zone_bounds(zone, size)
+	var min_x: int = bounds.x
+	var max_x: int = bounds.y
+	if max_x < min_x:
+		return
+	var max_y: int = main.grid_height - size
+	for y in range(max_y + 1):
+		for x in range(min_x, max_x + 1):
+			if _place_resource(resource_id, Vector2i(x, y)):
+				return
+
+func _zone_bounds(zone: String, size: int) -> Vector2i:
 	var min_x: int = 0
-	var max_x: int = main.grid_width - 2
-	var min_y: int = 0
-	var max_y: int = main.grid_height - 2
-	if require_band:
+	var max_x: int = main.grid_width - size
+	if zone == "player_zone":
+		min_x = max(main.grid_width - main.player_zone_width, 0)
+		max_x = max(main.grid_width - size, 0)
+	elif zone == "stone_band":
 		var band: Vector2i = main._stone_band_bounds()
 		min_x = band.x
 		max_x = band.y
-	if max_x < min_x or max_y < min_y:
-		return Vector2i(-1, -1)
-	var x: int = rng.randi_range(min_x, max_x)
-	var y: int = rng.randi_range(min_y, max_y)
-	return Vector2i(x, y)
+	return Vector2i(min_x, max_x)
 
-func _place_stone(top_left: Vector2i) -> bool:
-	var cells: Array[Vector2i] = [
-		top_left,
-		top_left + Vector2i(1, 0),
-		top_left + Vector2i(0, 1),
-		top_left + Vector2i(1, 1),
-	]
-	for cell in cells:
-		if not main._is_in_bounds(cell):
-			return false
-		if main._is_base_cell(cell):
-			return false
-		if main._is_path_cell(cell):
-			return false
-		if main._tree_by_cell.has(cell):
-			return false
-		if main._stone_by_cell.has(cell):
-			return false
-		if main._iron_by_cell.has(cell):
-			return false
-		if main._enemy_tower_by_cell.has(cell):
-			return false
-		if main._enemy_tower_by_cell.has(cell):
-			return false
-		if main._enemy_tower_by_cell.has(cell):
-			return false
-	var stone: Node2D = preload("res://scenes/Stone.tscn").instantiate() as Node2D
-	stone.set("cell", top_left)
-	stone.set("cell_size", main.cell_size)
-	main.add_child(stone)
-	main._stones.append(stone)
-	for cell in cells:
-		main._stone_by_cell[cell] = stone
+func _cell_in_zone(cell: Vector2i, zone: String) -> bool:
+	if zone == "player_zone":
+		return main._is_in_player_zone(cell)
+	if zone == "stone_band":
+		return main._is_in_stone_band(cell)
 	return true
 
-func _find_any_stone_band_cell() -> bool:
-	var band: Vector2i = main._stone_band_bounds()
-	for y in range(main.grid_height - 1):
-		for x in range(band.x, band.y + 1):
-			if _place_stone(Vector2i(x, y)):
-				return true
-	return false
-
-func _pick_iron_cell() -> Vector2i:
-	var min_x: int = 0
-	var max_x: int = main.grid_width - 2
-	var min_y: int = 0
-	var max_y: int = main.grid_height - 2
-	if max_x < min_x or max_y < min_y:
-		return Vector2i(-1, -1)
-	var x: int = rng.randi_range(min_x, max_x)
-	var y: int = rng.randi_range(min_y, max_y)
-	return Vector2i(x, y)
-
-func _place_iron(top_left: Vector2i) -> bool:
-	var cells: Array[Vector2i] = [
-		top_left,
-		top_left + Vector2i(1, 0),
-		top_left + Vector2i(0, 1),
-		top_left + Vector2i(1, 1),
-	]
-	for cell in cells:
-		if not main._is_in_bounds(cell):
-			return false
-		if main._is_base_cell(cell):
-			return false
-		if main._is_path_cell(cell):
-			return false
-		if main._tree_by_cell.has(cell):
-			return false
-		if main._stone_by_cell.has(cell):
-			return false
-		if main._iron_by_cell.has(cell):
-			return false
-	var iron: Node2D = preload("res://scenes/Iron.tscn").instantiate() as Node2D
-	iron.set("cell", top_left)
-	iron.set("cell_size", main.cell_size)
-	main.add_child(iron)
-	main._irons.append(iron)
-	for cell in cells:
-		main._iron_by_cell[cell] = iron
-	return true
-
-func _seed_rng(offset: int) -> void:
+func _seed_rng(resource_id: String) -> void:
 	if main.random_seed == 0:
 		rng.randomize()
 	else:
+		var offset: int = abs(resource_id.hash()) % 997
 		rng.seed = main.random_seed + offset

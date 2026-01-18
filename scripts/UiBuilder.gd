@@ -373,19 +373,14 @@ func build(main: Node) -> void:
 	resource_row.add_theme_constant_override("separation", 6)
 	editor_box.add_child(resource_row)
 
-	var tree_button: Button = Button.new()
-	tree_button.text = "Tree"
-	tree_button.pressed.connect(main._on_editor_tool_pressed.bind("tree"))
-	resource_row.add_child(tree_button)
-
-	var stone_button: Button = Button.new()
-	stone_button.text = "Stone"
-	stone_button.pressed.connect(main._on_editor_tool_pressed.bind("stone"))
-	resource_row.add_child(stone_button)
-	var iron_button: Button = Button.new()
-	iron_button.text = "Iron"
-	iron_button.pressed.connect(main._on_editor_tool_pressed.bind("iron"))
-	resource_row.add_child(iron_button)
+	for resource_id in main._resource_order:
+		if not main._resource_defs.has(resource_id):
+			continue
+		var def: Dictionary = main._resource_defs[resource_id]
+		var button: Button = Button.new()
+		button.text = str(def.get("label", resource_id))
+		button.pressed.connect(main._on_editor_tool_pressed.bind(resource_id))
+		resource_row.add_child(button)
 
 	var enemy_row: HBoxContainer = HBoxContainer.new()
 	enemy_row.add_theme_constant_override("separation", 6)
