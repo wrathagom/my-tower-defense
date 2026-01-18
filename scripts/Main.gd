@@ -47,7 +47,7 @@ extends Node2D
 @export var storage_capacity := 50
 @export var base_upgrade_stone_cost := 100
 @export var base_upgrade_cost := 100
-@export var base_hp_upgrade := 15
+@export var base_hp_upgrade := 25
 @export var build_time_tower := 10.0
 @export var build_time_woodcutter := 10.0
 @export var build_time_stonecutter := 10.0
@@ -143,6 +143,11 @@ var _base_start_cell := Vector2i(-1, -1)
 var _base_end_cell := Vector2i(-1, -1)
 var _editor_active := false
 
+# Fog of War
+var _fog_revealed_column: int = -1  # Leftmost revealed column (lower = more revealed)
+var _fog_enabled: bool = true
+@export var fog_color: Color = Color(0.05, 0.05, 0.1, 0.85)
+
 func _ready() -> void:
 	_setup_camera_controller()
 	_setup_resource_catalog()
@@ -169,6 +174,7 @@ func _ready() -> void:
 		_generate_random_path()
 	_rebuild_path()
 	_resource_spawner.spawn_resources()
+	_reset_fog()
 	_game_state_manager.set_splash_active(true)
 	queue_redraw()
 
@@ -181,6 +187,7 @@ func _process(_delta: float) -> void:
 		return
 	if _game_state_manager.is_paused():
 		return
+	_update_fog_progression()
 	if _editor_active:
 		if _camera_controller != null:
 			_camera_controller.update(_delta, true)
@@ -489,6 +496,7 @@ func _reset_game() -> void:
 		_resource_spawner.spawn_resources()
 	_clear_units()
 	_reset_bases()
+	_reset_fog()
 	_upgrade_manager.base_upgrade_in_progress = false
 	_game_state_manager.reset()
 	_economy.update_buttons_for_base_level(_upgrade_manager.base_level, _upgrade_manager.archery_range_level, _upgrade_manager.barracks_level)
@@ -501,6 +509,7 @@ func _reset_for_play() -> void:
 	_clear_constructions()
 	_clear_buildings()
 	_reset_bases()
+	_reset_fog()
 	_upgrade_manager.base_upgrade_in_progress = false
 	_game_state_manager.reset()
 	_upgrade_manager.set_upgrade_modal_visible(false)
@@ -639,6 +648,7 @@ func _draw() -> void:
 		_map_editor.draw(self)
 	if _placement != null:
 		_placement.draw_hover(self, _build_mode)
+	_draw_fog_of_war()
 
 func _draw_grid() -> void:
 	var grid_color := Color(0.2, 0.2, 0.2)
@@ -666,11 +676,17 @@ func _draw_player_zone() -> void:
 func _draw_path() -> void:
 	var painted_color := Color(0.9, 0.7, 0.2, 0.25)
 	for cell in path_cells:
+		# Skip cells hidden by fog
+		if _fog_enabled and not _editor_active and cell.x < _fog_revealed_column:
+			continue
 		var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
 		draw_rect(rect, painted_color, true)
 
 	var ordered_color := Color(0.9, 0.7, 0.2, 0.6) if _path_valid else Color(0.9, 0.2, 0.2, 0.6)
 	for cell in _ordered_path_cells:
+		# Skip cells hidden by fog
+		if _fog_enabled and not _editor_active and cell.x < _fog_revealed_column:
+			continue
 		var rect := Rect2(cell.x * cell_size, cell.y * cell_size, cell_size, cell_size)
 		draw_rect(rect, ordered_color, true)
 
@@ -1104,6 +1120,59 @@ func _base_band_bounds() -> Vector2i:
 		max_y = grid_height - 1
 	return Vector2i(min_y, max_y)
 
+func _reset_fog() -> void:
+	# Player zone is always visible
+	_fog_revealed_column = grid_width - player_zone_width
+
+func _update_fog_progression() -> void:
+	if not _fog_enabled:
+		return
+
+	for unit in get_tree().get_nodes_in_group("allies"):
+		var column: int = int(unit.position.x / cell_size)
+		column = clampi(column, 0, grid_width - 1)
+
+		# Track leftmost column any unit has reached
+		if column < _fog_revealed_column:
+			_fog_revealed_column = column
+			queue_redraw()
+
+	_update_fog_visibility()
+
+func _update_fog_visibility() -> void:
+	# Hide enemies in fog (they render as child nodes, above Main's _draw)
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		var column: int = int(enemy.position.x / cell_size)
+		enemy.visible = column >= _fog_revealed_column
+
+	# Hide enemy base if in fog
+	if _base_start != null:
+		var base_column: int = int(_base_start.position.x / cell_size)
+		_base_start.visible = base_column >= _fog_revealed_column
+
+	# Hide enemy towers in fog
+	for tower in _enemy_towers:
+		if tower != null and is_instance_valid(tower):
+			var column: int = int(tower.position.x / cell_size)
+			tower.visible = column >= _fog_revealed_column
+
+func _draw_fog_of_war() -> void:
+	if not _fog_enabled or _editor_active:
+		return
+
+	# Draw fog over unrevealed columns (left of revealed column)
+	for x in range(0, _fog_revealed_column):
+		for y in range(grid_height):
+			var rect := Rect2(x * cell_size, y * cell_size, cell_size, cell_size)
+			draw_rect(rect, fog_color, true)
+
+	# Optional: gradient edge at boundary
+	if _fog_revealed_column > 0:
+		var edge_color := Color(fog_color.r, fog_color.g, fog_color.b, 0.4)
+		for y in range(grid_height):
+			var rect := Rect2((_fog_revealed_column - 1) * cell_size, y * cell_size, cell_size, cell_size)
+			draw_rect(rect, edge_color, true)
+
 func _rebuild_path() -> void:
 	_ordered_path_cells = []
 	_path_valid = false
@@ -1188,6 +1257,8 @@ func _update_bases() -> void:
 	if _base_start == null:
 		_base_start = preload("res://scenes/Base.tscn").instantiate() as Base
 		add_child(_base_start)
+	_base_start.max_hp = 500
+	_base_start.reset_hp()
 	_base_start.size = cell_size * 3
 	_base_start.position = _cell_to_world(start_cell)
 	if not _base_start.died.is_connected(_on_base_died):

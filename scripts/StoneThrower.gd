@@ -1,11 +1,11 @@
 extends UnitBase
 
 func _init() -> void:
-	speed = 120.0
-	max_hp = 6
-	attack_range = 140.0
-	attack_damage = 1
-	attack_cooldown = 1.0
+	speed = 90.0
+	max_hp = 4
+	attack_range = 80.0
+	attack_damage = 2
+	attack_cooldown = 1.2
 	projectile_speed = 220.0
 	jitter_radius = 10.0
 	projectile_scene = "res://scenes/StoneProjectile.tscn"

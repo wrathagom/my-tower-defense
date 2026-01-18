@@ -1,10 +1,10 @@
 extends UnitBase
 
 func _init() -> void:
-	speed = 120.0
-	max_hp = 6
-	attack_range = 180.0
-	attack_damage = 2
+	speed = 150.0
+	max_hp = 3
+	attack_range = 200.0
+	attack_damage = 1
 	attack_cooldown = 0.9
 	projectile_speed = 260.0
 	jitter_radius = 10.0

@@ -1,11 +1,11 @@
 extends UnitBase
 
 func _init() -> void:
-	speed = 140.0
-	max_hp = 6
+	speed = 100.0
+	max_hp = 4
 	attack_range = 18.0
 	attack_damage = 1
-	attack_cooldown = 0.7
+	attack_cooldown = 1.0
 	jitter_radius = 10.0
 
 func _draw() -> void:
