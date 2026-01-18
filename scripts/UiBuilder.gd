@@ -433,6 +433,11 @@ func build(main: Node) -> void:
 	load_button.pressed.connect(main._on_editor_load_pressed)
 	save_row.add_child(load_button)
 
+	var export_button: Button = Button.new()
+	export_button.text = "Export Campaign"
+	export_button.pressed.connect(main._on_editor_export_campaign_pressed)
+	save_row.add_child(export_button)
+
 	main._editor_status_label = Label.new()
 	main._editor_status_label.text = ""
 	editor_box.add_child(main._editor_status_label)

@@ -1051,6 +1051,18 @@ func _on_editor_load_pressed() -> void:
 	else:
 		_set_editor_status("Invalid map data.")
 
+func _on_editor_export_campaign_pressed() -> void:
+	if _editor_name_input == null:
+		return
+	var name := _editor_name_input.text.strip_edges()
+	if name == "":
+		name = "custom_level"
+	var path: String = _map_editor.save_campaign_level(name)
+	if path == "":
+		_set_editor_status("Export failed. Add path + bases first.")
+	else:
+		_set_editor_status("Exported to: %s (also copied to clipboard)" % path)
+
 func _on_editor_back_pressed() -> void:
 	_map_editor.map_data = _map_editor.build_map_data()
 	_map_editor.use_custom_map = not _map_editor.map_data.is_empty()

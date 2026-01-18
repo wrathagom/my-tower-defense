@@ -390,3 +390,87 @@ func start_new_map() -> void:
 		_resource_spawner.clear_resources()
 	_main._clear_bases()
 	_main.queue_redraw()
+
+func export_campaign_level(level_name: String) -> String:
+	var map_data := build_map_data()
+	if map_data.is_empty():
+		return ""
+
+	# Convert map_data to campaign format
+	var campaign_map := {
+		"grid_width": map_data.get("grid_width", 64),
+		"grid_height": map_data.get("grid_height", 40),
+		"path_cells": map_data.get("path", []),
+		"base_start_cell": map_data.get("base_start", [-1, -1]),
+		"base_end_cell": map_data.get("base_end", [-1, -1]),
+		"resources": {},
+		"enemy_towers": map_data.get("enemy_towers", []),
+		"auto_generate": false
+	}
+
+	# Collect resources
+	for resource_id in _main._resource_defs.keys():
+		var def: Dictionary = _main._resource_defs[resource_id]
+		var map_key: String = str(def.get("map_key", resource_id))
+		if map_data.has(map_key):
+			campaign_map["resources"][resource_id] = map_data[map_key]
+
+	# Build full campaign level structure
+	var level_id := level_name.to_snake_case().replace(" ", "_")
+	var campaign_level := {
+		"id": level_id,
+		"name": level_name if level_name != "" else "Custom Level",
+		"campaign_order": 99,
+		"max_base_level": 4,
+		"available_units": ["grunt", "stone_thrower", "archer", "swordsman"],
+		"available_buildings": ["grunt_tower", "archer_tower", "woodcutter", "stonecutter", "iron_miner", "house", "farm", "wood_storage", "food_storage", "stone_storage", "iron_storage", "archery_range", "barracks"],
+		"difficulty_configs": {
+			"easy": {
+				"spawn_interval": 2.5,
+				"enemy_hp_multiplier": 0.8,
+				"enemy_damage_multiplier": 0.8,
+				"starting_resources": {"wood": 35, "food": 5, "stone": 10, "iron": 5},
+				"star_thresholds": {"time": 360, "base_hp_percent": 70, "units_lost": 15}
+			},
+			"medium": {
+				"spawn_interval": 1.5,
+				"enemy_hp_multiplier": 1.0,
+				"enemy_damage_multiplier": 1.0,
+				"starting_resources": {"wood": 25, "food": 3, "stone": 5, "iron": 0},
+				"star_thresholds": {"time": 300, "base_hp_percent": 80, "units_lost": 10}
+			},
+			"hard": {
+				"spawn_interval": 1.0,
+				"enemy_hp_multiplier": 1.3,
+				"enemy_damage_multiplier": 1.2,
+				"starting_resources": {"wood": 20, "food": 0, "stone": 0, "iron": 0},
+				"star_thresholds": {"time": 240, "base_hp_percent": 90, "units_lost": 5}
+			}
+		},
+		"challenge_modes": [],
+		"map_data": campaign_map
+	}
+
+	return JSON.stringify(campaign_level, "\t")
+
+func save_campaign_level(level_name: String) -> String:
+	var json_content := export_campaign_level(level_name)
+	if json_content == "":
+		return ""
+
+	var level_id := level_name.to_snake_case().replace(" ", "_")
+	if level_id == "":
+		level_id = "custom_level"
+
+	# Save to user:// for easy access
+	var path := "user://exported_%s.json" % level_id
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return ""
+	file.store_string(json_content)
+	file.close()
+
+	# Also copy to clipboard if available
+	DisplayServer.clipboard_set(json_content)
+
+	return path
