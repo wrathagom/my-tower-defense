@@ -27,12 +27,12 @@ func setup(main_node: Node, resource_spawner_node: Node) -> void:
 	_sync_ui_refs()
 
 func _sync_ui_refs() -> void:
-	if _main == null:
+	if _main == null or _main._ui_controller == null:
 		return
-	_editor_panel = _main._editor_panel
-	_editor_name_input = _main._editor_name_input
-	_editor_status_label = _main._editor_status_label
-	_editor_tool_label = _main._editor_tool_label
+	_editor_panel = _main._ui_controller.editor_panel
+	_editor_name_input = _main._ui_controller.editor_name_input
+	_editor_status_label = _main._ui_controller.editor_status_label
+	_editor_tool_label = _main._ui_controller.editor_tool_label
 
 func is_active() -> bool:
 	return active
@@ -245,7 +245,33 @@ func _is_resource_tool(t: String) -> bool:
 func draw(drawer: Node2D) -> void:
 	if not active:
 		return
+	_draw_band(drawer)
+	_draw_bases(drawer)
 	_draw_hover(drawer)
+
+func _draw_band(drawer: Node2D) -> void:
+	var band: Vector2i = _main._base_band_bounds()
+	var color: Color = Color(0.2, 0.4, 0.8, 0.12)
+	for y in range(band.x, band.y + 1):
+		for x in range(_main.config.grid_width):
+			var rect := Rect2(x * _main.config.cell_size, y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
+			drawer.draw_rect(rect, color, true)
+
+func _draw_bases(drawer: Node2D) -> void:
+	if _main._base_end_cell != Vector2i(-1, -1):
+		_draw_base(drawer, _main._base_end_cell, Color(0.2, 0.6, 1.0, 0.5))
+	if _main._base_start_cell != Vector2i(-1, -1):
+		_draw_base(drawer, _main._base_start_cell, Color(0.9, 0.2, 0.2, 0.5))
+
+func _draw_base(drawer: Node2D, center: Vector2i, color: Color) -> void:
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			var cell := Vector2i(center.x + dx, center.y + dy)
+			if not _main._is_in_bounds(cell):
+				continue
+			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
+			drawer.draw_rect(rect, color, true)
+			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
 func _draw_hover(drawer: Node2D) -> void:
 	if tool == "base_start" or tool == "base_end":
@@ -310,6 +336,88 @@ func _draw_square_top_left(drawer: Node2D, top_left: Vector2i, size_cells: int, 
 			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
+
+func save_map() -> void:
+	if _editor_name_input == null:
+		return
+	var name := _editor_name_input.text.strip_edges()
+	var data: Dictionary = build_map_data()
+	if data.is_empty():
+		set_status("Map needs path + bases before saving.")
+		return
+	for resource_id in _main._resource_order:
+		if not _main._resource_defs.has(resource_id):
+			continue
+		var def: Dictionary = _main._resource_defs[resource_id]
+		var rightmost: int = int(def.get("validation_rightmost", 0))
+		if rightmost <= 0:
+			continue
+		if not _has_resource_in_zone(resource_id, "rightmost"):
+			var label: String = str(def.get("label", resource_id)).to_lower()
+			set_status("Add at least 1 %s in the rightmost %d columns." % [label, min(rightmost, _main.config.grid_width)])
+			return
+	var MapIOScript: Script = load("res://scripts/MapIO.gd")
+	var ok: bool = MapIOScript.call("save_map", name, data)
+	if ok:
+		map_data = data
+		use_custom_map = true
+		refresh_map_list(name)
+		set_status("Saved: %s" % name)
+	else:
+		set_status("Save failed.")
+
+func load_map() -> void:
+	if _editor_name_input == null:
+		return
+	var name := _editor_name_input.text.strip_edges()
+	var MapIOScript: Script = load("res://scripts/MapIO.gd")
+	var data: Dictionary = MapIOScript.call("load_map", name)
+	if data.is_empty():
+		set_status("Load failed.")
+		return
+	if apply_map_data(data):
+		map_data = data
+		use_custom_map = true
+		refresh_map_list(name)
+		set_status("Loaded: %s" % name)
+	else:
+		set_status("Invalid map data.")
+
+func export_campaign() -> void:
+	if _editor_name_input == null:
+		return
+	var name := _editor_name_input.text.strip_edges()
+	if name == "":
+		name = "custom_level"
+	var path: String = save_campaign_level(name)
+	if path == "":
+		set_status("Export failed. Add path + bases first.")
+	else:
+		set_status("Exported to: %s (also copied to clipboard)" % path)
+
+func exit_to_menu() -> void:
+	map_data = build_map_data()
+	use_custom_map = not map_data.is_empty()
+	_main._set_editor_active(false)
+	_main._game_state_manager.set_splash_active(true)
+
+func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
+	var def: Dictionary = _main._resource_defs.get(resource_id, {})
+	var rightmost: int = int(def.get("validation_rightmost", 0))
+	for node in _main._resource_nodes(resource_id):
+		if node == null or not is_instance_valid(node):
+			continue
+		var cell_value = node.get("cell")
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			continue
+		var cell: Vector2i = cell_value
+		if zone == "player_zone":
+			if _main._is_in_player_zone(cell):
+				return true
+		elif zone == "rightmost":
+			if rightmost > 0 and cell.x >= max(_main.config.grid_width - rightmost, 0):
+				return true
+	return false
 
 func build_map_data() -> Dictionary:
 	if _main._base_start_cell == Vector2i(-1, -1) or _main._base_end_cell == Vector2i(-1, -1):

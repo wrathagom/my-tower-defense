@@ -43,6 +43,10 @@ var food_label: Label
 var stone_label: Label
 var iron_label: Label
 var unit_label: Label
+var editor_panel: PanelContainer
+var editor_name_input: LineEdit
+var editor_status_label: Label
+var editor_tool_label: Label
 
 func validate() -> void:
 	_validate_wiring()
@@ -62,6 +66,12 @@ func _validate_wiring() -> void:
 		push_error("UiController missing stats_panel")
 	if build_label == null:
 		push_error("UiController missing build_label")
+	if editor_panel == null:
+		push_error("UiController missing editor_panel")
+	if editor_name_input == null:
+		push_error("UiController missing editor_name_input")
+	if editor_tool_label == null:
+		push_error("UiController missing editor_tool_label")
 
 func set_hud_visible(visible: bool) -> void:
 	if hud_root != null:

@@ -369,30 +369,30 @@ func build(main: Node, ui: UiController) -> void:
 	# Keep play button reference for compatibility
 	ui.splash_play_button = ui.splash_sandbox_button
 
-	main._editor_panel = PanelContainer.new()
-	main._editor_panel.visible = false
-	main._editor_panel.size = Vector2(300, 320)
-	main._editor_panel.anchor_left = 0.0
-	main._editor_panel.anchor_top = 0.5
-	main._editor_panel.anchor_right = 0.0
-	main._editor_panel.anchor_bottom = 0.5
-	main._editor_panel.offset_left = 16
-	main._editor_panel.offset_top = -160
-	main._editor_panel.offset_right = 316
-	main._editor_panel.offset_bottom = 160
-	main._ui_layer.add_child(main._editor_panel)
+	ui.editor_panel = PanelContainer.new()
+	ui.editor_panel.visible = false
+	ui.editor_panel.size = Vector2(300, 320)
+	ui.editor_panel.anchor_left = 0.0
+	ui.editor_panel.anchor_top = 0.5
+	ui.editor_panel.anchor_right = 0.0
+	ui.editor_panel.anchor_bottom = 0.5
+	ui.editor_panel.offset_left = 16
+	ui.editor_panel.offset_top = -160
+	ui.editor_panel.offset_right = 316
+	ui.editor_panel.offset_bottom = 160
+	main._ui_layer.add_child(ui.editor_panel)
 
 	var editor_box: VBoxContainer = VBoxContainer.new()
 	editor_box.add_theme_constant_override("separation", 8)
-	main._editor_panel.add_child(editor_box)
+	ui.editor_panel.add_child(editor_box)
 
 	var editor_title: Label = Label.new()
 	editor_title.text = "Map Editor"
 	editor_box.add_child(editor_title)
 
-	main._editor_tool_label = Label.new()
-	main._editor_tool_label.text = "Tool: Path"
-	editor_box.add_child(main._editor_tool_label)
+	ui.editor_tool_label = Label.new()
+	ui.editor_tool_label.text = "Tool: Path"
+	editor_box.add_child(ui.editor_tool_label)
 
 	var tool_row: HBoxContainer = HBoxContainer.new()
 	tool_row.add_theme_constant_override("separation", 6)
@@ -444,9 +444,9 @@ func build(main: Node, ui: UiController) -> void:
 	name_label.text = "Map Name"
 	editor_box.add_child(name_label)
 
-	main._editor_name_input = LineEdit.new()
-	main._editor_name_input.placeholder_text = "example_map"
-	editor_box.add_child(main._editor_name_input)
+	ui.editor_name_input = LineEdit.new()
+	ui.editor_name_input.placeholder_text = "example_map"
+	editor_box.add_child(ui.editor_name_input)
 
 	var save_row: HBoxContainer = HBoxContainer.new()
 	save_row.add_theme_constant_override("separation", 6)
@@ -467,37 +467,30 @@ func build(main: Node, ui: UiController) -> void:
 	export_button.pressed.connect(main._on_editor_export_campaign_pressed)
 	save_row.add_child(export_button)
 
-	main._editor_status_label = Label.new()
-	main._editor_status_label.text = ""
-	editor_box.add_child(main._editor_status_label)
+	ui.editor_status_label = Label.new()
+	ui.editor_status_label.text = ""
+	editor_box.add_child(ui.editor_status_label)
 
 	var back_button: Button = Button.new()
 	back_button.text = "Back to Menu"
 	back_button.pressed.connect(main._on_editor_back_pressed)
 	editor_box.add_child(back_button)
 
-	# Level Select UI
+func build_campaign_ui(main: Node, campaign_controller) -> void:
 	var LevelSelectScript: Script = load("res://scripts/ui/LevelSelectUI.gd")
-	main._level_select_ui = LevelSelectScript.new()
-	main._level_select_ui.visible = false
-	main._level_select_ui.level_preview_requested.connect(main._on_level_preview_requested)
-	main._level_select_ui.back_pressed.connect(main._on_level_select_back)
-	main._ui_layer.add_child(main._level_select_ui)
+	var level_select_ui = LevelSelectScript.new()
+	level_select_ui.visible = false
+	main._ui_layer.add_child(level_select_ui)
+	campaign_controller.set_level_select_ui(level_select_ui)
 
-	# Level Launch UI (pre-level screen with lore)
 	var LevelLaunchScript: Script = load("res://scripts/ui/LevelLaunchUI.gd")
-	main._level_launch_ui = LevelLaunchScript.new()
-	main._level_launch_ui.visible = false
-	main._level_launch_ui.play_pressed.connect(main._on_level_selected)
-	main._level_launch_ui.back_pressed.connect(main._on_level_launch_back)
-	main._ui_layer.add_child(main._level_launch_ui)
+	var level_launch_ui = LevelLaunchScript.new()
+	level_launch_ui.visible = false
+	main._ui_layer.add_child(level_launch_ui)
+	campaign_controller.set_level_launch_ui(level_launch_ui)
 
-	# Level Complete UI
 	var LevelCompleteScript: Script = load("res://scripts/ui/LevelCompleteUI.gd")
-	main._level_complete_ui = LevelCompleteScript.new()
-	main._level_complete_ui.visible = false
-	main._level_complete_ui.retry_pressed.connect(main._on_level_retry)
-	main._level_complete_ui.next_level_pressed.connect(main._on_next_level)
-	main._level_complete_ui.level_select_pressed.connect(main._on_level_select_from_complete)
-	main._level_complete_ui.main_menu_pressed.connect(main._on_main_menu_from_complete)
-	main._ui_layer.add_child(main._level_complete_ui)
+	var level_complete_ui = LevelCompleteScript.new()
+	level_complete_ui.visible = false
+	main._ui_layer.add_child(level_complete_ui)
+	campaign_controller.set_level_complete_ui(level_complete_ui)

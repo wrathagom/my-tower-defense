@@ -2,7 +2,8 @@ Scripts Folder
 
 Main Flow
 - Main.gd: top-level game loop, path generation, base placement, camera, wiring.
-- UiBuilder.gd: constructs all runtime UI nodes and hooks signals.
+- UiBuilder.gd: constructs all runtime UI nodes and hooks signals; now writes UI refs into UiController (not Main).
+- UiController.gd: owns UI node references and UI updates; prefer calling its helpers over touching UI nodes directly.
 - Placement.gd: build placement, hover, construction timing.
 - Economy.gd: resource counts, caps, button gating, unit limits.
 - ResourceCatalog.gd: resource registry (count, size, scene, guarantees).
@@ -22,6 +23,9 @@ Buildings/Objects
 
 Notes
 - Many scripts rely on Main.gd helper methods (bounds, path cells, base cells).
+- UI wiring: UiBuilder.build(main, ui_controller) is the canonical entry; Main no longer stores HUD/splash/pause/game-over labels/buttons.
+- Upgrade modal UI is owned by UpgradeManager and UI refs come from UiController.
+- Config: GameConfig.gd is the central tuning resource; catalogs and systems should read from it, not hardcoded exports in Main.
 
 How To Add A New Unit
 - Create a new scene and script (e.g., `scenes/Slinger.tscn`, `scripts/Slinger.gd`) based on `Archer.gd` or `StoneThrower.gd`.

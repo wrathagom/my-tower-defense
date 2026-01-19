@@ -18,10 +18,6 @@ var _base_end: Base
 var _ui_layer: CanvasLayer
 var _ui_builder: Node
 var _ui_controller: UiController
-var _editor_panel: PanelContainer
-var _editor_name_input: LineEdit
-var _editor_status_label: Label
-var _editor_tool_label: Label
 var _spawn_buttons: Dictionary = {}
 var _unit_defs: Dictionary = {}
 var _unit_catalog: Node
@@ -51,9 +47,7 @@ var _base_start_cell := Vector2i(-1, -1)
 var _base_end_cell := Vector2i(-1, -1)
 var _editor_active := false
 var _performance_tracker: PerformanceTracker
-var _level_complete_ui: Node
-var _level_select_ui: Node
-var _level_launch_ui: Node
+var _campaign_controller: Node
 
 # Fog of War
 var _fog_revealed_column: int = -1  # Leftmost revealed column (lower = more revealed)
@@ -169,6 +163,17 @@ func _setup_ui_builder() -> void:
 	add_child(_ui_controller)
 	_ui_builder.build(self, _ui_controller)
 	_ui_controller.validate()
+	_setup_campaign_controller()
+
+func _setup_campaign_controller() -> void:
+	var CampaignControllerScript: Script = load("res://scripts/CampaignController.gd")
+	_campaign_controller = CampaignControllerScript.new()
+	add_child(_campaign_controller)
+	_campaign_controller.setup(self)
+	_campaign_controller.level_started.connect(_on_campaign_level_started)
+	_campaign_controller.level_retry_requested.connect(_on_level_retry)
+	_campaign_controller.show_splash_requested.connect(_on_show_splash)
+	_ui_builder.build_campaign_ui(self, _campaign_controller)
 
 func _setup_economy() -> void:
 	var EconomyScript: Script = load("res://scripts/Economy.gd")
@@ -587,11 +592,8 @@ func _draw() -> void:
 	_draw_path()
 	_draw_player_zone()
 	if _editor_active:
-		_draw_editor_band()
-		_draw_editor_bases()
-	_draw_grid()
-	if _editor_active:
 		_map_editor.draw(self)
+	_draw_grid()
 	if _placement != null:
 		_placement.draw_hover(self, _build_mode)
 	_draw_fog_of_war()
@@ -635,30 +637,6 @@ func _draw_path() -> void:
 			continue
 		var rect := Rect2(cell.x * config.cell_size, cell.y * config.cell_size, config.cell_size, config.cell_size)
 		draw_rect(rect, ordered_color, true)
-
-func _draw_editor_band() -> void:
-	var band := _base_band_bounds()
-	var color := Color(0.2, 0.4, 0.8, 0.12)
-	for y in range(band.x, band.y + 1):
-		for x in range(config.grid_width):
-			var rect := Rect2(x * config.cell_size, y * config.cell_size, config.cell_size, config.cell_size)
-			draw_rect(rect, color, true)
-
-func _draw_editor_bases() -> void:
-	if _base_end_cell != Vector2i(-1, -1):
-		_draw_editor_base(_base_end_cell, Color(0.2, 0.6, 1.0, 0.5))
-	if _base_start_cell != Vector2i(-1, -1):
-		_draw_editor_base(_base_start_cell, Color(0.9, 0.2, 0.2, 0.5))
-
-func _draw_editor_base(center: Vector2i, color: Color) -> void:
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			var cell := Vector2i(center.x + dx, center.y + dy)
-			if not _is_in_bounds(cell):
-				continue
-			var rect := Rect2(cell.x * config.cell_size, cell.y * config.cell_size, config.cell_size, config.cell_size)
-			draw_rect(rect, color, true)
-			draw_rect(rect, color.darkened(0.4), false, 2.0)
 
 func _cell_to_world(cell: Vector2i) -> Vector2:
 	return Vector2(cell.x * config.cell_size + config.cell_size * 0.5, cell.y * config.cell_size + config.cell_size * 0.5)
@@ -796,7 +774,6 @@ func _handle_level_end(is_player_base: bool) -> void:
 	if not CampaignManager.is_campaign_mode:
 		return
 
-	# In campaign mode, always hide the fallback game over panel
 	if _ui_controller != null:
 		_ui_controller.set_game_over_visible(false)
 
@@ -815,13 +792,7 @@ func _handle_level_end(is_player_base: bool) -> void:
 		base_max_hp
 	)
 
-	CampaignManager.record_level_completion(result)
-
-	# Show level complete UI
-	if _level_complete_ui != null and _level_complete_ui.has_method("show_result"):
-		_level_complete_ui.call("show_result", result)
-	else:
-		push_error("LevelCompleteUI not available or missing show_result method")
+	_campaign_controller.show_level_complete(result)
 
 func _on_restart_pressed() -> void:
 	get_tree().reload_current_scene.call_deferred()
@@ -834,7 +805,7 @@ func _on_sandbox_pressed() -> void:
 	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
 	_upgrade_manager.set_upgrade_modal_visible(false)
-	var map_name := _get_selected_map_name()
+	var map_name: String = _map_editor.get_selected_map_name()
 	if map_name != "":
 		var MapIOScript: Script = load("res://scripts/MapIO.gd")
 		var data: Dictionary = MapIOScript.call("load_map", map_name)
@@ -850,38 +821,13 @@ func _on_sandbox_pressed() -> void:
 		_reset_game()
 
 func _on_campaign_pressed() -> void:
-	if _ui_controller != null:
-		_ui_controller.set_splash_visible(false)
-	if _level_select_ui != null:
-		_level_select_ui.visible = true
-		if _level_select_ui.has_method("show_ui"):
-			_level_select_ui.call("show_ui")
+	_campaign_controller.show_campaign_select()
 
-func _on_level_preview_requested(level_id: String, difficulty: String) -> void:
-	if _level_select_ui != null:
-		_level_select_ui.visible = false
-	if _level_launch_ui != null and _level_launch_ui.has_method("show_level"):
-		_level_launch_ui.call("show_level", level_id, difficulty)
-
-func _on_level_launch_back() -> void:
-	if _level_launch_ui != null:
-		_level_launch_ui.visible = false
-	if _level_select_ui != null:
-		_level_select_ui.visible = true
-
-func _on_level_selected(level_id: String, difficulty: String) -> void:
-	CampaignManager.start_campaign_level(level_id, difficulty)
-	if _level_select_ui != null:
-		_level_select_ui.visible = false
-	if _level_launch_ui != null:
-		_level_launch_ui.visible = false
-
+func _on_campaign_level_started(level_id: String, difficulty: String, map_data: Dictionary) -> void:
 	_game_state_manager.set_splash_active(false)
 	_set_editor_active(false)
 	_upgrade_manager.set_upgrade_modal_visible(false)
 
-	# Apply campaign map if specified
-	var map_data := CampaignManager.get_map_data(level_id)
 	if not map_data.is_empty() and not map_data.get("auto_generate", true):
 		if _map_editor.apply_map_data(map_data):
 			_map_editor.map_data = map_data
@@ -889,36 +835,15 @@ func _on_level_selected(level_id: String, difficulty: String) -> void:
 			_reset_for_play()
 			return
 
-	# Use auto-generated map
 	_map_editor.use_custom_map = false
 	_reset_game()
-
-func _on_level_select_back() -> void:
-	if _level_select_ui != null:
-		_level_select_ui.visible = false
-	if _ui_controller != null:
-		_ui_controller.set_splash_visible(true)
 
 func _on_level_retry() -> void:
 	if _ui_controller != null:
 		_ui_controller.set_game_over_visible(false)
 	_reset_for_play()
 
-func _on_next_level() -> void:
-	var next_level := CampaignManager.get_next_level()
-	if next_level != "":
-		_on_level_selected(next_level, "easy")
-
-func _on_level_select_from_complete() -> void:
-	if _ui_controller != null:
-		_ui_controller.set_game_over_visible(false)
-	_game_state_manager.set_splash_active(true)
-	_on_campaign_pressed()
-
-func _on_main_menu_from_complete() -> void:
-	CampaignManager.exit_campaign()
-	if _ui_controller != null:
-		_ui_controller.set_game_over_visible(false)
+func _on_show_splash() -> void:
 	_game_state_manager.set_splash_active(true)
 
 func _on_resume_pressed() -> void:
@@ -949,71 +874,19 @@ func _on_create_map_pressed() -> void:
 	_map_editor.start_new_map()
 
 func _on_editor_tool_pressed(tool: String) -> void:
-	_set_editor_tool(tool)
+	_map_editor.set_tool(tool)
 
 func _on_editor_save_pressed() -> void:
-	if _editor_name_input == null:
-		return
-	var name := _editor_name_input.text.strip_edges()
-	var data: Dictionary = _map_editor.build_map_data()
-	if data.is_empty():
-		_set_editor_status("Map needs path + bases before saving.")
-		return
-	for resource_id in _resource_order:
-		if not _resource_defs.has(resource_id):
-			continue
-		var def: Dictionary = _resource_defs[resource_id]
-		var rightmost: int = int(def.get("validation_rightmost", 0))
-		if rightmost <= 0:
-			continue
-		if not _has_resource_in_zone(resource_id, "rightmost"):
-			var label: String = str(def.get("label", resource_id)).to_lower()
-			_set_editor_status("Add at least 1 %s in the rightmost %d columns." % [label, min(rightmost, config.grid_width)])
-			return
-	var MapIOScript: Script = load("res://scripts/MapIO.gd")
-	var ok: bool = MapIOScript.call("save_map", name, data)
-	if ok:
-		_map_editor.map_data = data
-		_map_editor.use_custom_map = true
-		_refresh_map_list(name)
-		_set_editor_status("Saved: %s" % name)
-	else:
-		_set_editor_status("Save failed.")
+	_map_editor.save_map()
 
 func _on_editor_load_pressed() -> void:
-	if _editor_name_input == null:
-		return
-	var name := _editor_name_input.text.strip_edges()
-	var MapIOScript: Script = load("res://scripts/MapIO.gd")
-	var data: Dictionary = MapIOScript.call("load_map", name)
-	if data.is_empty():
-		_set_editor_status("Load failed.")
-		return
-	if _map_editor.apply_map_data(data):
-		_map_editor.map_data = data
-		_map_editor.use_custom_map = true
-		_refresh_map_list(name)
-		_set_editor_status("Loaded: %s" % name)
-	else:
-		_set_editor_status("Invalid map data.")
+	_map_editor.load_map()
 
 func _on_editor_export_campaign_pressed() -> void:
-	if _editor_name_input == null:
-		return
-	var name := _editor_name_input.text.strip_edges()
-	if name == "":
-		name = "custom_level"
-	var path: String = _map_editor.save_campaign_level(name)
-	if path == "":
-		_set_editor_status("Export failed. Add path + bases first.")
-	else:
-		_set_editor_status("Exported to: %s (also copied to clipboard)" % path)
+	_map_editor.export_campaign()
 
 func _on_editor_back_pressed() -> void:
-	_map_editor.map_data = _map_editor.build_map_data()
-	_map_editor.use_custom_map = not _map_editor.map_data.is_empty()
-	_set_editor_active(false)
-	_game_state_manager.set_splash_active(true)
+	_map_editor.exit_to_menu()
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
@@ -1021,21 +894,6 @@ func _on_exit_pressed() -> void:
 func _set_editor_active(active: bool) -> void:
 	_editor_active = active
 	_map_editor.set_active(active)
-
-func _set_editor_tool(tool: String) -> void:
-	_map_editor.set_tool(tool)
-
-func _update_editor_tool_label() -> void:
-	_map_editor.update_tool_label()
-
-func _set_editor_status(text: String) -> void:
-	_map_editor.set_status(text)
-
-func _refresh_map_list(select_name: String = "") -> void:
-	_map_editor.refresh_map_list(select_name)
-
-func _get_selected_map_name() -> String:
-	return _map_editor.get_selected_map_name()
 
 func _is_in_enemy_zone(cell: Vector2i) -> bool:
 	return cell.x < min(config.player_zone_width, config.grid_width)
