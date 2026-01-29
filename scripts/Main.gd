@@ -1,58 +1,46 @@
 extends Node2D
 
 const GameConfig = preload("res://scripts/GameConfig.gd")
+const GameWorld = preload("res://scripts/state/GameWorld.gd")
 const UiController = preload("res://scripts/UiController.gd")
 const PerformanceTracker = preload("res://scripts/PerformanceTracker.gd")
 
 @export var config: GameConfig = GameConfig.new()
+@export var fog_color: Color = Color(0.05, 0.05, 0.1, 0.85)
 
-@export var path_cells: Array[Vector2i] = []
+# GameWorld holds all game state
+var _world: GameWorld
 
-var _occupied := {}
+# Manager references
 var _enemy_timer: Timer
-var _ordered_path_cells: Array[Vector2i] = []
-var _path_valid := false
 var _camera_controller: Node
-var _base_start: Base
-var _base_end: Base
 var _ui_layer: CanvasLayer
 var _ui_builder: Node
 var _ui_controller: UiController
-var _spawn_buttons: Dictionary = {}
-var _unit_defs: Dictionary = {}
 var _unit_catalog: Node
 var _unit_spawner: Node
-var _upgrade_button: Button
-var _build_category_buttons: Dictionary = {}
-var _build_category := ""
-var _build_buttons: Dictionary = {}
 var _building_catalog: Node
-var _building_defs: Dictionary = {}
 var _economy: Node
 var _placement: Node
 var _resource_catalog: Node
-var _resource_defs: Dictionary = {}
-var _resource_order: Array[String] = []
-var _resource_state: Dictionary = {}
 var _resource_spawner: ResourceSpawner
 var _path_generator: Node
 var _game_state_manager: Node
 var _upgrade_manager: Node
 var _map_editor: Node
-var _building_by_cell: Dictionary = {}
-var _enemy_towers: Array[Node2D] = []
-var _enemy_tower_by_cell: Dictionary = {}
-var _build_mode := "grunt_tower"
-var _base_start_cell := Vector2i(-1, -1)
-var _base_end_cell := Vector2i(-1, -1)
-var _editor_active := false
 var _performance_tracker: PerformanceTracker
 var _campaign_controller: Node
 
-# Fog of War
-var _fog_revealed_column: int = -1  # Leftmost revealed column (lower = more revealed)
-var _fog_enabled: bool = true
-@export var fog_color: Color = Color(0.05, 0.05, 0.1, 0.85)
+# UI-related state
+var _spawn_buttons: Dictionary = {}
+var _unit_defs: Dictionary = {}
+var _upgrade_button: Button
+var _build_category_buttons: Dictionary = {}
+var _build_category := ""
+var _build_buttons: Dictionary = {}
+var _building_defs: Dictionary = {}
+var _build_mode := "grunt_tower"
+var _editor_active := false
 
 func _ready() -> void:
 	if config == null:
@@ -60,6 +48,11 @@ func _ready() -> void:
 	elif not config.resource_local_to_scene:
 		config = config.duplicate() as GameConfig
 		config.resource_local_to_scene = true
+
+	# Create GameWorld container
+	_world = GameWorld.new(config)
+	_world.fog.color = fog_color
+
 	_setup_camera_controller()
 	_setup_resource_catalog()
 	_setup_economy()
@@ -89,7 +82,7 @@ func _ready() -> void:
 	_map_editor.update_tool_label()
 	_map_editor.refresh_map_list()
 	_update_base_label()
-	if config.auto_generate_path and path_cells.is_empty():
+	if config.auto_generate_path and _world.path.cells.is_empty():
 		_generate_random_path()
 	_rebuild_path()
 	_resource_spawner.spawn_resources()
@@ -118,7 +111,7 @@ func _process(_delta: float) -> void:
 		_placement.update_hover(get_global_mouse_position(), _build_mode)
 	if _camera_controller != null:
 		_camera_controller.update(_delta, false)
-	if _base_end != null and not _game_state_manager.is_game_over():
+	if _world.bases.end != null and not _game_state_manager.is_game_over():
 		_update_base_upgrade_indicator()
 	_update_archery_range_indicators()
 	_update_stats_panel()
@@ -140,7 +133,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_add_path_cell(world_pos)
 		else:
 			if _is_over_player_base(world_pos):
-				_upgrade_manager.show_upgrade_modal("base", _base_end)
+				_upgrade_manager.show_upgrade_modal("base", _world.bases.end)
 				return
 			var range := _get_archery_range_at(world_pos)
 			if range != null:
@@ -155,6 +148,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_set_build_mode("")
 
+# Setup methods
 func _setup_ui_builder() -> void:
 	var UiBuilderScript: Script = load("res://scripts/UiBuilder.gd")
 	_ui_builder = UiBuilderScript.new()
@@ -198,7 +192,7 @@ func _setup_units() -> void:
 	var UnitSpawnerScript: Script = load("res://scripts/UnitSpawner.gd")
 	_unit_spawner = UnitSpawnerScript.new()
 	add_child(_unit_spawner)
-	_unit_spawner.setup(self, _economy)
+	_unit_spawner.setup(self, _world, _economy, _upgrade_manager, _performance_tracker)
 
 	_build_spawn_buttons()
 	_economy.set_unit_defs(_unit_defs)
@@ -228,24 +222,24 @@ func _setup_placement() -> void:
 	var PlacementScript: Script = load("res://scripts/Placement.gd")
 	_placement = PlacementScript.new()
 	add_child(_placement)
-	_placement.setup(self, _economy)
+	_placement.setup(self, _world, _economy, _upgrade_manager, _building_defs)
 
 func _setup_resource_spawner() -> void:
 	_resource_spawner = ResourceSpawner.new()
 	add_child(_resource_spawner)
-	_resource_spawner.setup(self, _resource_defs, _resource_order)
+	_resource_spawner.setup(self, _world)
 
 func _setup_path_generator() -> void:
 	var PathGeneratorScript: Script = load("res://scripts/PathGenerator.gd")
 	_path_generator = PathGeneratorScript.new()
 	add_child(_path_generator)
-	_path_generator.setup(self)
+	_path_generator.setup(_world, config)
 
 func _setup_camera_controller() -> void:
 	var CameraControllerScript: Script = load("res://scripts/CameraController.gd")
 	_camera_controller = CameraControllerScript.new()
 	add_child(_camera_controller)
-	_camera_controller.setup(self)
+	_camera_controller.setup(self, _world)
 
 func _setup_game_state_manager() -> void:
 	var GameStateManagerScript: Script = load("res://scripts/GameStateManager.gd")
@@ -257,13 +251,13 @@ func _setup_upgrade_manager() -> void:
 	var UpgradeManagerScript: Script = load("res://scripts/UpgradeManager.gd")
 	_upgrade_manager = UpgradeManagerScript.new()
 	add_child(_upgrade_manager)
-	_upgrade_manager.setup(self, _economy)
+	_upgrade_manager.setup(self, _world, _economy)
 
 func _setup_map_editor() -> void:
 	var MapEditorScript: Script = load("res://scripts/MapEditor.gd")
 	_map_editor = MapEditorScript.new()
 	add_child(_map_editor)
-	_map_editor.setup(self, _resource_spawner)
+	_map_editor.setup(self, _world, _resource_spawner)
 
 func _setup_performance_tracker() -> void:
 	var PerformanceTrackerScript: Script = load("res://scripts/PerformanceTracker.gd")
@@ -274,20 +268,14 @@ func _setup_resource_catalog() -> void:
 	var ResourceCatalogScript: Script = load("res://scripts/ResourceCatalog.gd")
 	_resource_catalog = ResourceCatalogScript.new()
 	add_child(_resource_catalog)
-	_resource_defs = _resource_catalog.build_defs(config)
-	_resource_order = _resource_catalog.get_order()
-	for resource_id in _resource_defs.keys():
-		if not _resource_order.has(resource_id):
-			_resource_order.append(resource_id)
-	_resource_state.clear()
-	for resource_id in _resource_order:
-		if not _resource_defs.has(resource_id):
-			continue
-		_resource_state[resource_id] = {
-			"nodes": [],
-			"by_cell": {},
-		}
+	var defs: Dictionary = _resource_catalog.build_defs(config)
+	var order: Array[String] = _resource_catalog.get_order()
+	for resource_id in defs.keys():
+		if not order.has(resource_id):
+			order.append(resource_id)
+	_world.resources.initialize(defs, order)
 
+# UI building methods
 func _build_build_buttons() -> void:
 	var build_buttons_box: HBoxContainer = null
 	if _ui_controller != null:
@@ -418,11 +406,7 @@ func _spawn_unit_by_id(unit_id: String) -> void:
 		return
 	_unit_spawner.spawn_unit(unit_id, def)
 
-func set_path_cells(cells: Array[Vector2i]) -> void:
-	path_cells = cells
-	_rebuild_path()
-	queue_redraw()
-
+# Game state methods
 func _reset_game() -> void:
 	_clear_constructions()
 	_clear_buildings()
@@ -440,7 +424,6 @@ func _reset_game() -> void:
 	_economy.set_base_upgrade_in_progress(false)
 	_enemy_timer.start()
 
-	# Start performance tracking
 	if _performance_tracker != null:
 		_performance_tracker.start_tracking()
 
@@ -456,7 +439,6 @@ func _reset_for_play() -> void:
 	_game_state_manager.reset()
 	_upgrade_manager.set_upgrade_modal_visible(false)
 
-	# Apply campaign config if in campaign mode
 	var start_wood: int = config.starting_wood
 	var start_food: int = config.starting_food
 	var start_stone: int = config.starting_stone
@@ -480,7 +462,6 @@ func _reset_for_play() -> void:
 		_enemy_timer.wait_time = spawn_rate
 		_enemy_timer.start()
 
-	# Start performance tracking
 	if _performance_tracker != null:
 		_performance_tracker.start_tracking()
 
@@ -513,15 +494,6 @@ func _log_exit_diagnostics() -> void:
 		"construction": get_tree().get_nodes_in_group("construction").size(),
 	}
 	print("Exit diagnostics: %s" % counts)
-	# Prints to help correlate with --verbose engine shutdown logs.
-	for node in get_tree().get_nodes_in_group("enemies"):
-		print("Exit leftover enemy: %s" % node)
-	for node in get_tree().get_nodes_in_group("allies"):
-		print("Exit leftover ally: %s" % node)
-	for node in get_tree().get_nodes_in_group("projectiles"):
-		print("Exit leftover projectile: %s" % node)
-	for node in get_tree().get_nodes_in_group("construction"):
-		print("Exit leftover construction: %s" % node)
 
 func _clear_units() -> void:
 	for node in get_tree().get_nodes_in_group("enemies"):
@@ -533,10 +505,7 @@ func _clear_units() -> void:
 	_economy.reset_units()
 
 func _reset_bases() -> void:
-	if _base_start != null:
-		_base_start.reset_hp()
-	if _base_end != null:
-		_base_end.reset_hp()
+	_world.bases.reset_hp()
 
 func _update_base_label() -> void:
 	_update_upgrade_button_text()
@@ -572,143 +541,154 @@ func _set_build_mode(mode: String) -> void:
 			button.release_focus()
 
 func _on_upgrade_base_pressed() -> void:
-	_upgrade_manager.show_upgrade_modal("base", _base_end)
+	_upgrade_manager.show_upgrade_modal("base", _world.bases.end)
 
+# Path methods
 func _generate_random_path() -> void:
 	if _path_generator == null:
 		return
 	var result: Dictionary = _path_generator.generate_random_path()
-	path_cells = result.get("path", [])
-	_base_start_cell = result.get("start", Vector2i(-1, -1))
-	_base_end_cell = result.get("end", Vector2i(-1, -1))
-
-func _is_in_bounds(cell: Vector2i) -> bool:
-	return cell.x >= 0 and cell.y >= 0 and cell.x < config.grid_width and cell.y < config.grid_height
-
-func _is_path_cell(cell: Vector2i) -> bool:
-	return path_cells.has(cell)
-
-func _draw() -> void:
-	_draw_path()
-	_draw_player_zone()
-	if _editor_active:
-		_map_editor.draw(self)
-	_draw_grid()
-	if _placement != null:
-		_placement.draw_hover(self, _build_mode)
-	_draw_fog_of_war()
-
-func _draw_grid() -> void:
-	var grid_color := Color(0.2, 0.2, 0.2)
-	var zoom := 1.0
-	if _camera_controller != null:
-		zoom = _camera_controller.get_zoom()
-	var line_width := maxf(1.0, 1.0 / zoom)
-	for x in range(config.grid_width + 1):
-		var from := Vector2(x * config.cell_size, 0)
-		var to := Vector2(x * config.cell_size, config.grid_height * config.cell_size)
-		draw_line(from, to, grid_color, line_width)
-	for y in range(config.grid_height + 1):
-		var from := Vector2(0, y * config.cell_size)
-		var to := Vector2(config.grid_width * config.cell_size, y * config.cell_size)
-		draw_line(from, to, grid_color, line_width)
-
-func _draw_player_zone() -> void:
-	var start_x: int = max(config.grid_width - config.player_zone_width, 0)
-	var zone_color: Color = Color(0.2, 0.6, 0.25, 0.18)
-	for x in range(start_x, config.grid_width):
-		for y in range(config.grid_height):
-			var rect := Rect2(x * config.cell_size, y * config.cell_size, config.cell_size, config.cell_size)
-			draw_rect(rect, zone_color, true)
-
-func _draw_path() -> void:
-	var painted_color := Color(0.9, 0.7, 0.2, 0.25)
-	for cell in path_cells:
-		# Skip cells hidden by fog
-		if _fog_enabled and not _editor_active and cell.x < _fog_revealed_column:
-			continue
-		var rect := Rect2(cell.x * config.cell_size, cell.y * config.cell_size, config.cell_size, config.cell_size)
-		draw_rect(rect, painted_color, true)
-
-	var ordered_color := Color(0.9, 0.7, 0.2, 0.6) if _path_valid else Color(0.9, 0.2, 0.2, 0.6)
-	for cell in _ordered_path_cells:
-		# Skip cells hidden by fog
-		if _fog_enabled and not _editor_active and cell.x < _fog_revealed_column:
-			continue
-		var rect := Rect2(cell.x * config.cell_size, cell.y * config.cell_size, config.cell_size, config.cell_size)
-		draw_rect(rect, ordered_color, true)
-
-func _cell_to_world(cell: Vector2i) -> Vector2:
-	return Vector2(cell.x * config.cell_size + config.cell_size * 0.5, cell.y * config.cell_size + config.cell_size * 0.5)
-
-func _get_archery_range_at(world_pos: Vector2) -> Node2D:
-	return _upgrade_manager.get_archery_range_at(world_pos)
-
-func _try_upgrade_archery_range(range: Node2D) -> void:
-	_upgrade_manager.try_upgrade_archery_range(range)
-
-func _update_archery_range_indicators() -> void:
-	_upgrade_manager.update_archery_range_indicators()
-
-func _update_base_upgrade_indicator() -> void:
-	_upgrade_manager.update_base_upgrade_indicator()
-
-func _update_stats_panel() -> void:
-	var base_level: int = 0
-	if _upgrade_manager != null:
-		base_level = _upgrade_manager.base_level
-	if _ui_controller != null:
-		_ui_controller.update_stats(_performance_tracker, base_level, _base_end)
-
-func _register_archery_range(range: Node2D) -> void:
-	_upgrade_manager.register_archery_range(range)
-
-func _register_barracks(barracks: Node2D) -> void:
-	_upgrade_manager.register_barracks(barracks)
-
-func _is_over_player_base(world_pos: Vector2) -> bool:
-	if _base_end == null:
-		return false
-	var half := _base_end.size * 0.5
-	var local := world_pos - _base_end.position
-	return absf(local.x) <= half and absf(local.y) <= half
-
-func _spawn_construction(top_left: Vector2i, size: int, duration: float) -> Node2D:
-	var ConstructionScript: Script = load("res://scripts/Construction.gd")
-	var construction: Node2D = ConstructionScript.new()
-	construction.config.cell_size = config.cell_size
-	construction.size_cells = size
-	construction.duration = duration
-	construction.position = Vector2(top_left.x * config.cell_size, top_left.y * config.cell_size)
-	add_child(construction)
-	return construction
+	_world.path.cells = result.get("path", [])
+	_world.path.base_start_cell = result.get("start", Vector2i(-1, -1))
+	_world.path.base_end_cell = result.get("end", Vector2i(-1, -1))
 
 func _add_path_cell(world_pos: Vector2) -> void:
-	var cell := Vector2i(int(world_pos.x / config.cell_size), int(world_pos.y / config.cell_size))
-	if not _is_in_bounds(cell):
+	var grid := _world.grid
+	var cell := Vector2i(int(world_pos.x / grid.cell_size), int(world_pos.y / grid.cell_size))
+	if not grid.is_in_bounds(cell):
 		return
-	if _occupied.has(cell):
+	if _world.occupancy.occupied.has(cell):
 		return
-	if _resource_cell_has_any(cell):
+	if _world.resources.has_any_at(cell):
 		return
-	if _building_by_cell.has(cell):
+	if _world.occupancy.building_by_cell.has(cell):
 		return
-	if _is_path_cell(cell):
+	if _world.path.is_path_cell(cell):
 		return
-	path_cells.append(cell)
+	_world.path.cells.append(cell)
 	_rebuild_path()
 	queue_redraw()
 
 func _remove_path_cell(world_pos: Vector2) -> void:
-	var cell := Vector2i(int(world_pos.x / config.cell_size), int(world_pos.y / config.cell_size))
-	if not _is_in_bounds(cell):
+	var grid := _world.grid
+	var cell := Vector2i(int(world_pos.x / grid.cell_size), int(world_pos.y / grid.cell_size))
+	if not grid.is_in_bounds(cell):
 		return
-	if not _is_path_cell(cell):
+	if not _world.path.is_path_cell(cell):
 		return
-	path_cells.erase(cell)
+	_world.path.cells.erase(cell)
 	_rebuild_path()
 	queue_redraw()
 
+func _rebuild_path() -> void:
+	var path := _world.path
+	var grid := _world.grid
+	path.ordered_cells = []
+	path.valid = false
+	if path.cells.is_empty():
+		_world.bases.clear()
+		return
+
+	var walkable: Dictionary[Vector2i, bool] = {}
+	for cell in path.cells:
+		walkable[cell] = true
+
+	var starts: Array[Vector2i] = []
+	if path.base_start_cell != Vector2i(-1, -1) and path.base_end_cell != Vector2i(-1, -1):
+		if walkable.has(path.base_start_cell) and walkable.has(path.base_end_cell):
+			starts.append(path.base_start_cell)
+	else:
+		for cell in path.cells:
+			if cell.x == grid.path_margin and grid.is_in_base_band(cell):
+				starts.append(cell)
+	if starts.is_empty():
+		_world.bases.clear()
+		return
+
+	var frontier: Array[Vector2i] = starts.duplicate()
+	var came_from: Dictionary[Vector2i, Vector2i] = {}
+	for start in starts:
+		came_from[start] = Vector2i(-999, -999)
+
+	var goal := Vector2i(-1, -1)
+	if path.base_start_cell != Vector2i(-1, -1) and path.base_end_cell != Vector2i(-1, -1):
+		goal = path.base_end_cell
+	var directions: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+
+	while not frontier.is_empty():
+		var current: Vector2i = frontier.pop_front() as Vector2i
+		if goal != Vector2i(-1, -1):
+			if current == goal:
+				break
+		elif current.x == grid.grid_width - 1 - grid.path_margin and grid.is_in_base_band(current):
+			goal = current
+			break
+		for dir in directions:
+			var next: Vector2i = current + dir
+			if not walkable.has(next):
+				continue
+			if came_from.has(next):
+				continue
+			came_from[next] = current
+			frontier.append(next)
+
+	if goal == Vector2i(-1, -1):
+		_world.bases.clear()
+		return
+	if not came_from.has(goal):
+		path.valid = false
+		_world.bases.clear()
+		return
+
+	var path_rev: Array[Vector2i] = []
+	var step: Vector2i = goal
+	while step != Vector2i(-999, -999):
+		path_rev.append(step)
+		if not came_from.has(step):
+			path.valid = false
+			_world.bases.clear()
+			return
+		step = came_from[step]
+
+	path_rev.reverse()
+	path.ordered_cells = path_rev
+	path.valid = true
+	_update_bases()
+
+func _update_bases() -> void:
+	var path := _world.path
+	var grid := _world.grid
+	if not path.valid or path.ordered_cells.is_empty():
+		_world.bases.clear()
+		return
+
+	var start_cell := path.ordered_cells[0]
+	var end_cell := path.ordered_cells[path.ordered_cells.size() - 1]
+
+	if _world.bases.start == null:
+		_world.bases.start = preload("res://scenes/Base.tscn").instantiate() as Base
+		add_child(_world.bases.start)
+	var enemy_base_hp := 500
+	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
+		var multiplier := CampaignManager.get_enemy_base_hp_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
+		enemy_base_hp = int(500.0 * multiplier)
+	_world.bases.start.max_hp = enemy_base_hp
+	_world.bases.start.reset_hp()
+	_world.bases.start.size = grid.cell_size * 3
+	_world.bases.start.position = grid.cell_to_world(start_cell)
+	if not _world.bases.start.died.is_connected(_on_base_died):
+		_world.bases.start.died.connect(_on_base_died.bind(false))
+
+	if _world.bases.end == null:
+		_world.bases.end = preload("res://scenes/Base.tscn").instantiate() as Base
+		add_child(_world.bases.end)
+	_world.bases.end.size = grid.cell_size * 3
+	_world.bases.end.position = grid.cell_to_world(end_cell)
+	_world.bases.end.is_goal = true
+	if not _world.bases.end.died.is_connected(_on_base_died):
+		_world.bases.end.died.connect(_on_base_died.bind(true))
+
+# Enemy spawning
 func _setup_enemy_timer() -> void:
 	_enemy_timer = Timer.new()
 	_enemy_timer.wait_time = config.spawn_interval
@@ -728,12 +708,11 @@ func _spawn_enemy() -> void:
 		return
 	if _game_state_manager.is_game_over():
 		return
-	if not _path_valid:
+	if not _world.path.valid:
 		return
 	var enemy: Node2D = preload("res://scenes/Enemy.tscn").instantiate() as Node2D
-	enemy.visible = false  # Hide until fog visibility is updated next frame
-	enemy.path_points = _get_path_points()
-	# Apply campaign multipliers
+	enemy.visible = false
+	enemy.path_points = _world.path.get_path_points(_world.grid)
 	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
 		enemy.hp_multiplier = CampaignManager.get_enemy_hp_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
 		enemy.damage_multiplier = CampaignManager.get_enemy_damage_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
@@ -746,14 +725,14 @@ func _on_enemy_died() -> void:
 		_performance_tracker.record_enemy_killed()
 
 func _on_enemy_reached_goal(enemy: Node2D) -> void:
-	if _base_end != null:
-		_base_end.take_damage(1)
+	if _world.bases.end != null:
+		_world.bases.end.take_damage(1)
 	if enemy != null and is_instance_valid(enemy):
 		enemy.queue_free()
 
 func _on_unit_reached_goal(unit: Node2D) -> void:
-	if _base_start != null:
-		_base_start.take_damage(1)
+	if _world.bases.start != null:
+		_world.bases.start.take_damage(1)
 	_on_unit_removed(unit, "")
 
 func _on_unit_removed(unit: Node2D, unit_id: String = "") -> void:
@@ -780,9 +759,9 @@ func _handle_level_end(is_player_base: bool) -> void:
 	var victory: bool = not is_player_base
 	var base_hp: int = 0
 	var base_max_hp: int = 25
-	if _base_end != null:
-		base_hp = _base_end.hp
-		base_max_hp = _base_end.max_hp
+	if _world.bases.end != null:
+		base_hp = _world.bases.end.hp
+		base_max_hp = _world.bases.end.max_hp
 
 	var result: RefCounted = _performance_tracker.build_result(
 		CampaignManager.current_level_id,
@@ -794,6 +773,7 @@ func _handle_level_end(is_player_base: bool) -> void:
 
 	_campaign_controller.show_level_complete(result)
 
+# UI callbacks
 func _on_restart_pressed() -> void:
 	get_tree().reload_current_scene.call_deferred()
 
@@ -895,88 +875,74 @@ func _set_editor_active(active: bool) -> void:
 	_editor_active = active
 	_map_editor.set_active(active)
 
-func _is_in_enemy_zone(cell: Vector2i) -> bool:
-	return cell.x < min(config.player_zone_width, config.grid_width)
+# Helper methods
+func _is_over_player_base(world_pos: Vector2) -> bool:
+	if _world.bases.end == null:
+		return false
+	var half: float = _world.bases.end.size * 0.5
+	var local: Vector2 = world_pos - _world.bases.end.position
+	return absf(local.x) <= half and absf(local.y) <= half
 
+func _get_archery_range_at(world_pos: Vector2) -> Node2D:
+	return _upgrade_manager.get_archery_range_at(world_pos)
+
+func _update_archery_range_indicators() -> void:
+	_upgrade_manager.update_archery_range_indicators()
+
+func _update_base_upgrade_indicator() -> void:
+	_upgrade_manager.update_base_upgrade_indicator()
+
+func _update_stats_panel() -> void:
+	var base_level: int = 0
+	if _upgrade_manager != null:
+		base_level = _upgrade_manager.base_level
+	if _ui_controller != null:
+		_ui_controller.update_stats(_performance_tracker, base_level, _world.bases.end)
+
+func _register_archery_range(range: Node2D) -> void:
+	_upgrade_manager.register_archery_range(range)
+
+func _register_barracks(barracks: Node2D) -> void:
+	_upgrade_manager.register_barracks(barracks)
+
+func _spawn_construction(top_left: Vector2i, size: int, duration: float) -> Node2D:
+	var grid := _world.grid
+	var ConstructionScript: Script = load("res://scripts/Construction.gd")
+	var construction: Node2D = ConstructionScript.new()
+	construction.cell_size = grid.cell_size
+	construction.size_cells = size
+	construction.duration = duration
+	construction.position = Vector2(top_left.x * grid.cell_size, top_left.y * grid.cell_size)
+	add_child(construction)
+	return construction
+
+# Enemy tower methods
 func _place_enemy_tower(cell: Vector2i) -> void:
+	var grid := _world.grid
 	var script: Script = load("res://scripts/EnemyTower.gd")
 	var tower: Node2D = script.new() as Node2D
 	tower.set("cell", cell)
-	tower.set("cell_size", config.cell_size)
+	tower.set("cell_size", grid.cell_size)
 	add_child(tower)
-	_enemy_towers.append(tower)
-	_enemy_tower_by_cell[cell] = tower
+	_world.occupancy.enemy_towers.append(tower)
+	_world.occupancy.enemy_tower_by_cell[cell] = tower
 
 func _remove_enemy_tower_at(cell: Vector2i) -> bool:
-	if not _enemy_tower_by_cell.has(cell):
+	if not _world.occupancy.enemy_tower_by_cell.has(cell):
 		return false
-	var tower: Node2D = _enemy_tower_by_cell[cell] as Node2D
-	_enemy_tower_by_cell.erase(cell)
+	var tower: Node2D = _world.occupancy.enemy_tower_by_cell[cell] as Node2D
+	_world.occupancy.enemy_tower_by_cell.erase(cell)
 	if tower != null and is_instance_valid(tower):
-		_enemy_towers.erase(tower)
+		_world.occupancy.enemy_towers.erase(tower)
 		tower.queue_free()
 	return true
 
-func _collect_resource_cells(resource_id: String) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	var seen: Dictionary = {}
-	var nodes: Array = _resource_nodes(resource_id)
-	for node in nodes:
-		if node == null or not is_instance_valid(node):
-			continue
-		if not node.has_method("get"):
-			continue
-		var cell_value = node.get("cell")
-		if typeof(cell_value) != TYPE_VECTOR2I:
-			continue
-		var cell: Vector2i = cell_value
-		if seen.has(cell):
-			continue
-		seen[cell] = true
-		cells.append(cell)
-	return cells
-
-func _has_tree_in_player_zone() -> bool:
-	return _has_resource_in_zone("tree", "player_zone")
-
-func _has_stone_in_player_band() -> bool:
-	return _has_resource_in_zone("stone", "rightmost")
-
-func _has_iron_in_player_band() -> bool:
-	return _has_resource_in_zone("iron", "rightmost")
-
-func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
-	var def: Dictionary = _resource_defs.get(resource_id, {})
-	var rightmost: int = int(def.get("validation_rightmost", 0))
-	for node in _resource_nodes(resource_id):
-		if node == null or not is_instance_valid(node):
-			continue
-		var cell_value = node.get("cell")
-		if typeof(cell_value) != TYPE_VECTOR2I:
-			continue
-		var cell: Vector2i = cell_value
-		if zone == "player_zone":
-			if _is_in_player_zone(cell):
-				return true
-		elif zone == "rightmost":
-			if rightmost > 0 and cell.x >= max(config.grid_width - rightmost, 0):
-				return true
-	return false
-
-func _resource_nodes(resource_id: String) -> Array:
-	var state: Dictionary = _resource_state.get(resource_id, {})
-	return state.get("nodes", [])
-
-func _resource_map(resource_id: String) -> Dictionary:
-	var state: Dictionary = _resource_state.get(resource_id, {})
-	return state.get("by_cell", {})
-
-func _resource_cell_has_any(cell: Vector2i) -> bool:
-	for resource_id in _resource_defs.keys():
-		var map: Dictionary = _resource_map(resource_id)
-		if map.has(cell):
-			return true
-	return false
+func _clear_enemy_towers() -> void:
+	for tower in _world.occupancy.enemy_towers:
+		if tower != null and is_instance_valid(tower):
+			tower.queue_free()
+	_world.occupancy.enemy_towers.clear()
+	_world.occupancy.enemy_tower_by_cell.clear()
 
 func _clear_constructions() -> void:
 	for node in get_tree().get_nodes_in_group("construction"):
@@ -984,15 +950,15 @@ func _clear_constructions() -> void:
 
 func _clear_buildings() -> void:
 	var unique: Dictionary = {}
-	for building in _building_by_cell.values():
+	for building in _world.occupancy.building_by_cell.values():
 		if building == null or not is_instance_valid(building):
 			continue
 		if unique.has(building):
 			continue
 		unique[building] = true
 		building.queue_free()
-	_building_by_cell.clear()
-	_occupied.clear()
+	_world.occupancy.building_by_cell.clear()
+	_world.occupancy.occupied.clear()
 	_clear_grunt_towers()
 	_upgrade_manager.reset()
 
@@ -1001,232 +967,118 @@ func _clear_grunt_towers() -> void:
 		if node != null and is_instance_valid(node):
 			node.queue_free()
 
-func _clear_enemy_towers() -> void:
-	for tower in _enemy_towers:
-		if tower != null and is_instance_valid(tower):
-			tower.queue_free()
-	_enemy_towers.clear()
-	_enemy_tower_by_cell.clear()
-
-func _get_path_points() -> Array[Vector2]:
-	var points: Array[Vector2] = []
-	for cell in _ordered_path_cells:
-		points.append(_cell_to_world(cell))
-	return points
-
-func _get_path_points_reversed() -> Array[Vector2]:
-	var points: Array[Vector2] = _get_path_points()
-	points.reverse()
-	return points
-
-func _is_in_player_zone(cell: Vector2i) -> bool:
-	return cell.x >= max(config.grid_width - config.player_zone_width, 0)
-
-func _is_base_cell(cell: Vector2i) -> bool:
-	for base_cell in _base_cells():
-		if cell == base_cell:
-			return true
-	return false
-
-func _base_cells() -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	if _base_start_cell == Vector2i(-1, -1) or _base_end_cell == Vector2i(-1, -1):
-		return cells
-	for base_center in [_base_start_cell, _base_end_cell]:
-		for dy in range(-1, 2):
-			for dx in range(-1, 2):
-				var cell := Vector2i(base_center.x + dx, base_center.y + dy)
-				if _is_in_bounds(cell):
-					cells.append(cell)
-	return cells
-
-func _stone_band_bounds() -> Vector2i:
-	var start_x: int = max(config.grid_width - config.player_zone_width - 10, 0)
-	var end_x: int = max(config.grid_width - config.player_zone_width - 1, 0)
-	if end_x < start_x:
-		end_x = start_x
-	return Vector2i(start_x, end_x)
-
-func _is_in_stone_band(cell: Vector2i) -> bool:
-	var band: Vector2i = _stone_band_bounds()
-	return cell.x >= band.x and cell.x <= band.y
-
-func _is_in_iron_band(cell: Vector2i) -> bool:
-	return cell.x >= max(config.grid_width - 13, 0)
-
-func _is_in_base_band(cell: Vector2i) -> bool:
-	var band := _base_band_bounds()
-	return cell.y >= band.x and cell.y <= band.y
-
-func _base_band_bounds() -> Vector2i:
-	var min_y: int = int(floor(config.grid_height / 3.0))
-	var max_y: int = int(floor(2.0 * config.grid_height / 3.0)) - 1
-	if max_y < min_y:
-		min_y = 0
-		max_y = config.grid_height - 1
-	return Vector2i(min_y, max_y)
-
+# Fog of War
 func _reset_fog() -> void:
-	# Player zone is always visible
-	_fog_revealed_column = config.grid_width - config.player_zone_width
+	_world.fog.reset(_world.grid)
 
 func _update_fog_progression() -> void:
-	if not _fog_enabled:
+	if not _world.fog.enabled:
 		return
 
 	for unit in get_tree().get_nodes_in_group("allies"):
-		var column: int = int(unit.position.x / config.cell_size)
-		column = clampi(column, 0, config.grid_width - 1)
+		var column: int = int(unit.position.x / _world.grid.cell_size)
+		column = clampi(column, 0, _world.grid.grid_width - 1)
 
-		# Track leftmost column any unit has reached
-		if column < _fog_revealed_column:
-			_fog_revealed_column = column
+		if column < _world.fog.revealed_column:
+			_world.fog.revealed_column = column
 			queue_redraw()
 
 	_update_fog_visibility()
 
 func _update_fog_visibility() -> void:
-	# Hide enemies in fog (they render as child nodes, above Main's _draw)
 	for enemy in get_tree().get_nodes_in_group("enemies"):
-		var column: int = int(enemy.position.x / config.cell_size)
-		enemy.visible = column >= _fog_revealed_column
+		var column: int = int(enemy.position.x / _world.grid.cell_size)
+		enemy.visible = column >= _world.fog.revealed_column
 
-	# Hide enemy base if in fog
-	if _base_start != null:
-		var base_column: int = int(_base_start.position.x / config.cell_size)
-		_base_start.visible = base_column >= _fog_revealed_column
+	if _world.bases.start != null:
+		var base_column: int = int(_world.bases.start.position.x / _world.grid.cell_size)
+		_world.bases.start.visible = base_column >= _world.fog.revealed_column
 
-	# Hide enemy towers in fog
-	for tower in _enemy_towers:
+	for tower in _world.occupancy.enemy_towers:
 		if tower != null and is_instance_valid(tower):
-			var column: int = int(tower.position.x / config.cell_size)
-			tower.visible = column >= _fog_revealed_column
+			var column: int = int(tower.position.x / _world.grid.cell_size)
+			tower.visible = column >= _world.fog.revealed_column
+
+# Drawing
+func _draw() -> void:
+	_draw_path()
+	_draw_player_zone()
+	if _editor_active:
+		_map_editor.draw(self)
+	_draw_grid()
+	if _placement != null:
+		_placement.draw_hover(self, _build_mode)
+	_draw_fog_of_war()
+
+func _draw_grid() -> void:
+	var grid := _world.grid
+	var grid_color := Color(0.2, 0.2, 0.2)
+	var zoom := 1.0
+	if _camera_controller != null:
+		zoom = _camera_controller.get_zoom()
+	var line_width := maxf(1.0, 1.0 / zoom)
+	for x in range(grid.grid_width + 1):
+		var from := Vector2(x * grid.cell_size, 0)
+		var to := Vector2(x * grid.cell_size, grid.grid_height * grid.cell_size)
+		draw_line(from, to, grid_color, line_width)
+	for y in range(grid.grid_height + 1):
+		var from := Vector2(0, y * grid.cell_size)
+		var to := Vector2(grid.grid_width * grid.cell_size, y * grid.cell_size)
+		draw_line(from, to, grid_color, line_width)
+
+func _draw_player_zone() -> void:
+	var grid := _world.grid
+	var start_x: int = max(grid.grid_width - grid.player_zone_width, 0)
+	var zone_color: Color = Color(0.2, 0.6, 0.25, 0.18)
+	for x in range(start_x, grid.grid_width):
+		for y in range(grid.grid_height):
+			var rect := Rect2(x * grid.cell_size, y * grid.cell_size, grid.cell_size, grid.cell_size)
+			draw_rect(rect, zone_color, true)
+
+func _draw_path() -> void:
+	var grid := _world.grid
+	var path := _world.path
+	var painted_color := Color(0.9, 0.7, 0.2, 0.25)
+	for cell in path.cells:
+		if _world.fog.enabled and not _editor_active and cell.x < _world.fog.revealed_column:
+			continue
+		var rect := Rect2(cell.x * grid.cell_size, cell.y * grid.cell_size, grid.cell_size, grid.cell_size)
+		draw_rect(rect, painted_color, true)
+
+	var ordered_color := Color(0.9, 0.7, 0.2, 0.6) if path.valid else Color(0.9, 0.2, 0.2, 0.6)
+	for cell in path.ordered_cells:
+		if _world.fog.enabled and not _editor_active and cell.x < _world.fog.revealed_column:
+			continue
+		var rect := Rect2(cell.x * grid.cell_size, cell.y * grid.cell_size, grid.cell_size, grid.cell_size)
+		draw_rect(rect, ordered_color, true)
 
 func _draw_fog_of_war() -> void:
-	if not _fog_enabled or _editor_active:
+	if not _world.fog.enabled or _editor_active:
 		return
 
-	# Draw fog over unrevealed columns (left of revealed column)
-	for x in range(0, _fog_revealed_column):
-		for y in range(config.grid_height):
-			var rect := Rect2(x * config.cell_size, y * config.cell_size, config.cell_size, config.cell_size)
-			draw_rect(rect, fog_color, true)
+	var grid := _world.grid
+	for x in range(0, _world.fog.revealed_column):
+		for y in range(grid.grid_height):
+			var rect := Rect2(x * grid.cell_size, y * grid.cell_size, grid.cell_size, grid.cell_size)
+			draw_rect(rect, _world.fog.color, true)
 
-	# Optional: gradient edge at boundary
-	if _fog_revealed_column > 0:
-		var edge_color := Color(fog_color.r, fog_color.g, fog_color.b, 0.4)
-		for y in range(config.grid_height):
-			var rect := Rect2((_fog_revealed_column - 1) * config.cell_size, y * config.cell_size, config.cell_size, config.cell_size)
+	if _world.fog.revealed_column > 0:
+		var edge_color := Color(_world.fog.color.r, _world.fog.color.g, _world.fog.color.b, 0.4)
+		for y in range(grid.grid_height):
+			var rect := Rect2((_world.fog.revealed_column - 1) * grid.cell_size, y * grid.cell_size, grid.cell_size, grid.cell_size)
 			draw_rect(rect, edge_color, true)
 
-func _rebuild_path() -> void:
-	_ordered_path_cells = []
-	_path_valid = false
-	if path_cells.is_empty():
-		_clear_bases()
-		return
+# Compatibility accessors (for backward compatibility with external scripts)
+var path_cells: Array[Vector2i]:
+	get:
+		return _world.path.cells
+	set(value):
+		_world.path.cells = value
 
-	var walkable: Dictionary[Vector2i, bool] = {}
-	for cell in path_cells:
-		walkable[cell] = true
+func _is_in_bounds(cell: Vector2i) -> bool:
+	return _world.grid.is_in_bounds(cell)
 
-	var starts: Array[Vector2i] = []
-	if _base_start_cell != Vector2i(-1, -1) and _base_end_cell != Vector2i(-1, -1):
-		if walkable.has(_base_start_cell) and walkable.has(_base_end_cell):
-			starts.append(_base_start_cell)
-	else:
-		for cell in path_cells:
-			if cell.x == config.path_margin and _is_in_base_band(cell):
-				starts.append(cell)
-	if starts.is_empty():
-		_clear_bases()
-		return
-
-	var frontier: Array[Vector2i] = starts.duplicate()
-	var came_from: Dictionary[Vector2i, Vector2i] = {}
-	for start in starts:
-		came_from[start] = Vector2i(-999, -999)
-
-	var goal := Vector2i(-1, -1)
-	if _base_start_cell != Vector2i(-1, -1) and _base_end_cell != Vector2i(-1, -1):
-		goal = _base_end_cell
-	var directions: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-
-	while not frontier.is_empty():
-		var current: Vector2i = frontier.pop_front() as Vector2i
-		if goal != Vector2i(-1, -1):
-			if current == goal:
-				break
-		elif current.x == config.grid_width - 1 - config.path_margin and _is_in_base_band(current):
-			goal = current
-			break
-		for dir in directions:
-			var next: Vector2i = current + dir
-			if not walkable.has(next):
-				continue
-			if came_from.has(next):
-				continue
-			came_from[next] = current
-			frontier.append(next)
-
-	if goal == Vector2i(-1, -1):
-		_clear_bases()
-		return
-	if not came_from.has(goal):
-		_path_valid = false
-		_clear_bases()
-		return
-
-	var path_rev: Array[Vector2i] = []
-	var step: Vector2i = goal
-	while step != Vector2i(-999, -999):
-		path_rev.append(step)
-		if not came_from.has(step):
-			_path_valid = false
-			_clear_bases()
-			return
-		step = came_from[step]
-
-	path_rev.reverse()
-	_ordered_path_cells = path_rev
-	_path_valid = true
-	_update_bases()
-
-func _update_bases() -> void:
-	if not _path_valid or _ordered_path_cells.is_empty():
-		_clear_bases()
-		return
-
-	var start_cell := _ordered_path_cells[0]
-	var end_cell := _ordered_path_cells[_ordered_path_cells.size() - 1]
-
-	if _base_start == null:
-		_base_start = preload("res://scenes/Base.tscn").instantiate() as Base
-		add_child(_base_start)
-	var enemy_base_hp := 500
-	if CampaignManager.is_campaign_mode and CampaignManager.current_level_id != "":
-		var multiplier := CampaignManager.get_enemy_base_hp_multiplier(CampaignManager.current_level_id, CampaignManager.current_difficulty)
-		enemy_base_hp = int(500.0 * multiplier)
-	_base_start.max_hp = enemy_base_hp
-	_base_start.reset_hp()
-	_base_start.size = config.cell_size * 3
-	_base_start.position = _cell_to_world(start_cell)
-	if not _base_start.died.is_connected(_on_base_died):
-		_base_start.died.connect(_on_base_died.bind(false))
-
-	if _base_end == null:
-		_base_end = preload("res://scenes/Base.tscn").instantiate() as Base
-		add_child(_base_end)
-	_base_end.size = config.cell_size * 3
-	_base_end.position = _cell_to_world(end_cell)
-	_base_end.is_goal = true
-	if not _base_end.died.is_connected(_on_base_died):
-		_base_end.died.connect(_on_base_died.bind(true))
-
-func _clear_bases() -> void:
-	if _base_start != null:
-		_base_start.queue_free()
-		_base_start = null
-	if _base_end != null:
-		_base_end.queue_free()
-		_base_end = null
+func set_path_cells(cells: Array[Vector2i]) -> void:
+	_world.path.cells = cells
+	_rebuild_path()
+	queue_redraw()

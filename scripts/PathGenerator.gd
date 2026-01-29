@@ -1,7 +1,11 @@
 class_name PathGenerator
 extends Node
 
-var _main: Node
+const GameWorld = preload("res://scripts/state/GameWorld.gd")
+const GameConfig = preload("res://scripts/GameConfig.gd")
+
+var _world: GameWorld
+var _config: GameConfig
 
 var grid_width: int
 var grid_height: int
@@ -13,22 +17,23 @@ var random_seed: int
 var restrict_path_to_base_band: bool
 var path_generation_attempts: int
 
-func setup(main_node: Node) -> void:
-	_main = main_node
+func setup(world: GameWorld, config: GameConfig) -> void:
+	_world = world
+	_config = config
 	_sync_config()
 
 func _sync_config() -> void:
-	if _main == null:
+	if _config == null:
 		return
-	grid_width = _main.config.grid_width
-	grid_height = _main.config.grid_height
-	path_margin = _main.config.path_margin
-	path_straightness = _main.config.path_straightness
-	path_max_vertical_step = _main.config.path_max_vertical_step
-	path_length_multiplier = _main.config.path_length_multiplier
-	random_seed = _main.config.random_seed
-	restrict_path_to_base_band = _main.config.restrict_path_to_base_band
-	path_generation_attempts = _main.config.path_generation_attempts
+	grid_width = _config.grid_width
+	grid_height = _config.grid_height
+	path_margin = _config.path_margin
+	path_straightness = _config.path_straightness
+	path_max_vertical_step = _config.path_max_vertical_step
+	path_length_multiplier = _config.path_length_multiplier
+	random_seed = _config.random_seed
+	restrict_path_to_base_band = _config.restrict_path_to_base_band
+	path_generation_attempts = _config.path_generation_attempts
 
 func generate_random_path() -> Dictionary:
 	_sync_config()

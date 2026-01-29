@@ -45,6 +45,7 @@ var iron_label: Label
 var unit_label: Label
 var editor_panel: PanelContainer
 var editor_name_input: LineEdit
+var editor_campaign_select: OptionButton
 var editor_status_label: Label
 var editor_tool_label: Label
 
@@ -70,6 +71,8 @@ func _validate_wiring() -> void:
 		push_error("UiController missing editor_panel")
 	if editor_name_input == null:
 		push_error("UiController missing editor_name_input")
+	if editor_campaign_select == null:
+		push_error("UiController missing editor_campaign_select")
 	if editor_tool_label == null:
 		push_error("UiController missing editor_tool_label")
 

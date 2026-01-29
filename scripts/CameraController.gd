@@ -1,23 +1,25 @@
 class_name CameraController
 extends Node
 
+const GameWorld = preload("res://scripts/state/GameWorld.gd")
+
 var _main: Node
+var _world: GameWorld
 var _camera: Camera2D
 var _camera_zoom := 1.0
 var _camera_target := Vector2.ZERO
 
-func setup(main_node: Node) -> void:
+func setup(main_node: Node, world: GameWorld) -> void:
 	_main = main_node
+	_world = world
 	_setup_camera()
 
 func _setup_camera() -> void:
-	if _main == null:
+	if _main == null or _world == null:
 		return
 	_camera = Camera2D.new()
-	var grid_width: int = _main.config.grid_width
-	var grid_height: int = _main.config.grid_height
-	var cell_size: int = _main.config.cell_size
-	_camera_target = Vector2(grid_width * cell_size * 0.5, grid_height * cell_size * 0.5)
+	var grid := _world.grid
+	_camera_target = Vector2(grid.grid_width * grid.cell_size * 0.5, grid.grid_height * grid.cell_size * 0.5)
 	_camera.position = _camera_target
 	_main.add_child(_camera)
 	_camera.make_current()
@@ -25,12 +27,13 @@ func _setup_camera() -> void:
 	_main.get_viewport().size_changed.connect(_update_camera_zoom)
 
 func _update_camera_zoom() -> void:
-	if _main == null or _camera == null:
+	if _world == null or _camera == null:
 		return
 	var viewport_size: Vector2 = _main.get_viewport_rect().size
-	var grid_width: int = _main.config.grid_width
-	var grid_height: int = _main.config.grid_height
-	var cell_size: int = _main.config.cell_size
+	var grid := _world.grid
+	var grid_width: int = grid.grid_width
+	var grid_height: int = grid.grid_height
+	var cell_size: int = grid.cell_size
 	var world_size: Vector2 = Vector2(grid_width * cell_size, grid_height * cell_size)
 	if world_size.x <= 0 or world_size.y <= 0:
 		return

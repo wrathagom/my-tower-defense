@@ -1,11 +1,14 @@
 class_name MapEditor
 extends Node
 
+const GameWorld = preload("res://scripts/state/GameWorld.gd")
+
 signal editor_activated()
 signal editor_deactivated()
 signal map_loaded(data: Dictionary)
 
 var _main: Node
+var _world: GameWorld
 var _resource_spawner: Node
 
 var active := false
@@ -18,11 +21,13 @@ var map_list: Array[String] = []
 
 var _editor_panel: PanelContainer
 var _editor_name_input: LineEdit
+var _editor_campaign_select: OptionButton
 var _editor_status_label: Label
 var _editor_tool_label: Label
 
-func setup(main_node: Node, resource_spawner_node: Node) -> void:
+func setup(main_node: Node, world: GameWorld, resource_spawner_node: Node) -> void:
 	_main = main_node
+	_world = world
 	_resource_spawner = resource_spawner_node
 	_sync_ui_refs()
 
@@ -31,6 +36,7 @@ func _sync_ui_refs() -> void:
 		return
 	_editor_panel = _main._ui_controller.editor_panel
 	_editor_name_input = _main._ui_controller.editor_name_input
+	_editor_campaign_select = _main._ui_controller.editor_campaign_select
 	_editor_status_label = _main._ui_controller.editor_status_label
 	_editor_tool_label = _main._ui_controller.editor_tool_label
 
@@ -52,13 +58,14 @@ func set_active(is_active: bool) -> void:
 	if active:
 		_main._game_state_manager.set_paused(false)
 		_main._game_state_manager.set_fast_forward(false)
+		refresh_campaign_level_list()
 		_main._clear_units()
 		_main._clear_constructions()
-		_main._clear_buildings()
-		_main._clear_enemy_towers()
+		_clear_buildings()
+		_clear_enemy_towers()
 		if _resource_spawner != null:
 			_resource_spawner.clear_resources()
-		_main._clear_bases()
+		_world.bases.clear()
 		_main.queue_redraw()
 		editor_activated.emit()
 	else:
@@ -76,7 +83,7 @@ func update_tool_label() -> void:
 		elif tool == "base_end":
 			name = "Enemy Base"
 		elif _is_resource_tool(tool):
-			var def: Dictionary = _main._resource_defs.get(tool, {})
+			var def: Dictionary = _world.resources.defs.get(tool, {})
 			name = str(def.get("label", tool))
 		_editor_tool_label.text = "Tool: %s" % name
 
@@ -138,14 +145,15 @@ func handle_input(event: InputEvent) -> bool:
 	return false
 
 func handle_click(world_pos: Vector2) -> void:
-	var cell := Vector2i(int(world_pos.x / _main.config.cell_size), int(world_pos.y / _main.config.cell_size))
-	if not _main._is_in_bounds(cell):
+	var grid := _world.grid
+	var cell := Vector2i(int(world_pos.x / grid.cell_size), int(world_pos.y / grid.cell_size))
+	if not grid.is_in_bounds(cell):
 		return
 	if tool == "path":
-		if _main._resource_cell_has_any(cell):
+		if _world.resources.has_any_at(cell):
 			return
-		if not _main.path_cells.has(cell):
-			_main.path_cells.append(cell)
+		if not _world.path.cells.has(cell):
+			_world.path.cells.append(cell)
 		_main._rebuild_path()
 		_main.queue_redraw()
 		return
@@ -154,19 +162,19 @@ func handle_click(world_pos: Vector2) -> void:
 			if _resource_spawner.remove_resource_at(cell):
 				_main.queue_redraw()
 				return
-		if _main._remove_enemy_tower_at(cell):
+		if _remove_enemy_tower_at(cell):
 			_main.queue_redraw()
 			return
-		if _main.path_cells.has(cell):
-			_main.path_cells.erase(cell)
+		if _world.path.cells.has(cell):
+			_world.path.cells.erase(cell)
 			_main._rebuild_path()
 			_main.queue_redraw()
 			return
-		if _main._base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_main._base_start_cell, cell):
-			_main._base_start_cell = Vector2i(-1, -1)
-		if _main._base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_main._base_end_cell, cell):
-			_main._base_end_cell = Vector2i(-1, -1)
-		if _main._base_start_cell == Vector2i(-1, -1) or _main._base_end_cell == Vector2i(-1, -1):
+		if _world.path.base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_world.path.base_start_cell, cell):
+			_world.path.base_start_cell = Vector2i(-1, -1)
+		if _world.path.base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_world.path.base_end_cell, cell):
+			_world.path.base_end_cell = Vector2i(-1, -1)
+		if _world.path.base_start_cell == Vector2i(-1, -1) or _world.path.base_end_cell == Vector2i(-1, -1):
 			_main._rebuild_path()
 			_main.queue_redraw()
 		return
@@ -174,18 +182,18 @@ func handle_click(world_pos: Vector2) -> void:
 		if not _can_place_base(cell, tool):
 			return
 		if tool == "base_start":
-			_main._base_end_cell = cell
+			_world.path.base_end_cell = cell
 		else:
-			_main._base_start_cell = cell
-		if not _main.path_cells.has(cell):
-			_main.path_cells.append(cell)
+			_world.path.base_start_cell = cell
+		if not _world.path.cells.has(cell):
+			_world.path.cells.append(cell)
 		_main._rebuild_path()
 		_main.queue_redraw()
 		return
 	if tool == "enemy_tower":
 		if not _can_place_enemy_tower(cell):
 			return
-		_main._place_enemy_tower(cell)
+		_place_enemy_tower(cell)
 		_main.queue_redraw()
 		return
 	if _is_resource_tool(tool):
@@ -199,27 +207,30 @@ func handle_click(world_pos: Vector2) -> void:
 func handle_drag(world_pos: Vector2) -> void:
 	if tool != "path" and tool != "erase":
 		return
-	var cell := Vector2i(int(world_pos.x / _main.config.cell_size), int(world_pos.y / _main.config.cell_size))
+	var grid := _world.grid
+	var cell := Vector2i(int(world_pos.x / grid.cell_size), int(world_pos.y / grid.cell_size))
 	if cell == last_cell:
 		return
 	last_cell = cell
 	handle_click(world_pos)
 
 func _can_place_base(center: Vector2i, kind: String) -> bool:
-	if kind == "base_start" and not _main._is_in_player_zone(center):
+	var grid := _world.grid
+	var path := _world.path
+	if kind == "base_start" and not grid.is_in_player_zone(center):
 		return false
 	for dy in range(-1, 2):
 		for dx in range(-1, 2):
 			var cell := Vector2i(center.x + dx, center.y + dy)
-			if not _main._is_in_bounds(cell):
+			if not grid.is_in_bounds(cell):
 				return false
-			if _main._resource_cell_has_any(cell):
+			if _world.resources.has_any_at(cell):
 				return false
-			if _main.path_cells.has(cell) and cell != center:
+			if path.cells.has(cell) and cell != center:
 				return false
-			if _main._base_start_cell != Vector2i(-1, -1) and _is_in_base_area(_main._base_start_cell, cell):
+			if path.base_start_cell != Vector2i(-1, -1) and _is_in_base_area(path.base_start_cell, cell):
 				return false
-			if _main._base_end_cell != Vector2i(-1, -1) and _is_in_base_area(_main._base_end_cell, cell):
+			if path.base_end_cell != Vector2i(-1, -1) and _is_in_base_area(path.base_end_cell, cell):
 				return false
 	return true
 
@@ -227,20 +238,23 @@ func _is_in_base_area(center: Vector2i, cell: Vector2i) -> bool:
 	return abs(center.x - cell.x) <= 1 and abs(center.y - cell.y) <= 1
 
 func _can_place_enemy_tower(cell: Vector2i) -> bool:
-	if not _main._is_in_bounds(cell):
+	var grid := _world.grid
+	var path := _world.path
+	var bases := _world.bases
+	if not grid.is_in_bounds(cell):
 		return false
-	if _main._is_base_cell(cell):
+	if bases.is_base_cell(cell, path, grid):
 		return false
-	if _main.path_cells.has(cell):
+	if path.cells.has(cell):
 		return false
-	if _main._resource_cell_has_any(cell):
+	if _world.resources.has_any_at(cell):
 		return false
-	if _main._enemy_tower_by_cell.has(cell):
+	if _world.occupancy.enemy_tower_by_cell.has(cell):
 		return false
 	return true
 
 func _is_resource_tool(t: String) -> bool:
-	return _main._resource_defs.has(t)
+	return _world.resources.defs.has(t)
 
 func draw(drawer: Node2D) -> void:
 	if not active:
@@ -250,90 +264,99 @@ func draw(drawer: Node2D) -> void:
 	_draw_hover(drawer)
 
 func _draw_band(drawer: Node2D) -> void:
-	var band: Vector2i = _main._base_band_bounds()
+	var grid := _world.grid
+	var band: Vector2i = grid.base_band_bounds()
 	var color: Color = Color(0.2, 0.4, 0.8, 0.12)
 	for y in range(band.x, band.y + 1):
-		for x in range(_main.config.grid_width):
-			var rect := Rect2(x * _main.config.cell_size, y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
+		for x in range(grid.grid_width):
+			var rect := Rect2(x * grid.cell_size, y * grid.cell_size, grid.cell_size, grid.cell_size)
 			drawer.draw_rect(rect, color, true)
 
 func _draw_bases(drawer: Node2D) -> void:
-	if _main._base_end_cell != Vector2i(-1, -1):
-		_draw_base(drawer, _main._base_end_cell, Color(0.2, 0.6, 1.0, 0.5))
-	if _main._base_start_cell != Vector2i(-1, -1):
-		_draw_base(drawer, _main._base_start_cell, Color(0.9, 0.2, 0.2, 0.5))
+	var path := _world.path
+	if path.base_end_cell != Vector2i(-1, -1):
+		_draw_base(drawer, path.base_end_cell, Color(0.2, 0.6, 1.0, 0.5))
+	if path.base_start_cell != Vector2i(-1, -1):
+		_draw_base(drawer, path.base_start_cell, Color(0.9, 0.2, 0.2, 0.5))
 
 func _draw_base(drawer: Node2D, center: Vector2i, color: Color) -> void:
+	var grid := _world.grid
 	for dx in range(-1, 2):
 		for dy in range(-1, 2):
 			var cell := Vector2i(center.x + dx, center.y + dy)
-			if not _main._is_in_bounds(cell):
+			if not grid.is_in_bounds(cell):
 				continue
-			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
+			var rect := Rect2(cell.x * grid.cell_size, cell.y * grid.cell_size, grid.cell_size, grid.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
 func _draw_hover(drawer: Node2D) -> void:
+	var grid := _world.grid
+	var path := _world.path
+	var bases := _world.bases
 	if tool == "base_start" or tool == "base_end":
 		var cell := _mouse_cell()
-		if not _main._is_in_bounds(cell):
+		if not grid.is_in_bounds(cell):
 			return
 		var valid: bool = _can_place_base(cell, tool)
 		_draw_square(drawer, cell, 3, valid)
 	elif tool == "path":
 		var cell := _mouse_cell()
-		if not _main._is_in_bounds(cell):
+		if not grid.is_in_bounds(cell):
 			return
-		if _main._resource_cell_has_any(cell):
+		if _world.resources.has_any_at(cell):
 			return
 		_draw_square(drawer, cell, 1, true)
 	elif _is_resource_tool(tool):
 		var cell := _mouse_cell()
-		if not _main._is_in_bounds(cell):
+		if not grid.is_in_bounds(cell):
 			return
 		var valid: bool = true
-		if _main._resource_cell_has_any(cell):
+		if _world.resources.has_any_at(cell):
 			valid = false
-		if _main.path_cells.has(cell) or _main._is_base_cell(cell):
+		if path.cells.has(cell) or bases.is_base_cell(cell, path, grid):
 			valid = false
 		_draw_square_top_left(drawer, cell, 2, valid)
 	elif tool == "enemy_tower":
 		var cell := _mouse_cell()
-		if not _main._is_in_bounds(cell):
+		if not grid.is_in_bounds(cell):
 			return
 		var valid: bool = _can_place_enemy_tower(cell)
 		_draw_square(drawer, cell, 1, valid)
 	elif tool == "erase":
 		var cell := _mouse_cell()
-		if not _main._is_in_bounds(cell):
+		if not grid.is_in_bounds(cell):
 			return
-		var valid: bool = _main._resource_cell_has_any(cell) or _main.path_cells.has(cell) or _main._is_base_cell(cell) or _main._enemy_tower_by_cell.has(cell)
+		var valid: bool = _world.resources.has_any_at(cell) or path.cells.has(cell) or bases.is_base_cell(cell, path, grid) or _world.occupancy.enemy_tower_by_cell.has(cell)
 		_draw_square(drawer, cell, 1, valid)
 
 func _mouse_cell() -> Vector2i:
+	var grid := _world.grid
 	var world_pos: Vector2 = _main.get_global_mouse_position()
-	return Vector2i(int(world_pos.x / _main.config.cell_size), int(world_pos.y / _main.config.cell_size))
+	return Vector2i(int(world_pos.x / grid.cell_size), int(world_pos.y / grid.cell_size))
 
 func _draw_square(drawer: Node2D, center: Vector2i, size_cells: int, valid: bool) -> void:
+	var grid := _world.grid
 	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
 	var half := int(floor(size_cells / 2.0))
 	for dx in range(-half, -half + size_cells):
 		for dy in range(-half, -half + size_cells):
 			var cell := Vector2i(center.x + dx, center.y + dy)
-			if not _main._is_in_bounds(cell):
+			if not grid.is_in_bounds(cell):
 				continue
-			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
+			var rect := Rect2(cell.x * grid.cell_size, cell.y * grid.cell_size, grid.cell_size, grid.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
 func _draw_square_top_left(drawer: Node2D, top_left: Vector2i, size_cells: int, valid: bool) -> void:
+	var grid := _world.grid
 	var color := Color(0.2, 0.8, 0.3, 0.45) if valid else Color(0.9, 0.2, 0.2, 0.45)
 	for dx in range(size_cells):
 		for dy in range(size_cells):
 			var cell := Vector2i(top_left.x + dx, top_left.y + dy)
-			if not _main._is_in_bounds(cell):
+			if not grid.is_in_bounds(cell):
 				continue
-			var rect := Rect2(cell.x * _main.config.cell_size, cell.y * _main.config.cell_size, _main.config.cell_size, _main.config.cell_size)
+			var rect := Rect2(cell.x * grid.cell_size, cell.y * grid.cell_size, grid.cell_size, grid.cell_size)
 			drawer.draw_rect(rect, color, true)
 			drawer.draw_rect(rect, color.darkened(0.4), false, 2.0)
 
@@ -342,20 +365,10 @@ func save_map() -> void:
 		return
 	var name := _editor_name_input.text.strip_edges()
 	var data: Dictionary = build_map_data()
-	if data.is_empty():
-		set_status("Map needs path + bases before saving.")
+	var error := _validate_map_for_save(data)
+	if error != "":
+		set_status(error)
 		return
-	for resource_id in _main._resource_order:
-		if not _main._resource_defs.has(resource_id):
-			continue
-		var def: Dictionary = _main._resource_defs[resource_id]
-		var rightmost: int = int(def.get("validation_rightmost", 0))
-		if rightmost <= 0:
-			continue
-		if not _has_resource_in_zone(resource_id, "rightmost"):
-			var label: String = str(def.get("label", resource_id)).to_lower()
-			set_status("Add at least 1 %s in the rightmost %d columns." % [label, min(rightmost, _main.config.grid_width)])
-			return
 	var MapIOScript: Script = load("res://scripts/MapIO.gd")
 	var ok: bool = MapIOScript.call("save_map", name, data)
 	if ok:
@@ -384,16 +397,20 @@ func load_map() -> void:
 		set_status("Invalid map data.")
 
 func export_campaign() -> void:
-	if _editor_name_input == null:
+	var level_id := get_selected_campaign_level_id()
+	if level_id == "":
+		set_status("Select a campaign level to save.")
 		return
-	var name := _editor_name_input.text.strip_edges()
-	if name == "":
-		name = "custom_level"
-	var path: String = save_campaign_level(name)
+	var data: Dictionary = build_map_data()
+	var error := _validate_map_for_save(data)
+	if error != "":
+		set_status(error)
+		return
+	var path: String = save_campaign_level_to_id(level_id, data)
 	if path == "":
-		set_status("Export failed. Add path + bases first.")
+		set_status("Save failed. Check campaign level data.")
 	else:
-		set_status("Exported to: %s (also copied to clipboard)" % path)
+		set_status("Saved campaign level: %s" % level_id)
 
 func exit_to_menu() -> void:
 	map_data = build_map_data()
@@ -402,9 +419,9 @@ func exit_to_menu() -> void:
 	_main._game_state_manager.set_splash_active(true)
 
 func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
-	var def: Dictionary = _main._resource_defs.get(resource_id, {})
+	var def: Dictionary = _world.resources.defs.get(resource_id, {})
 	var rightmost: int = int(def.get("validation_rightmost", 0))
-	for node in _main._resource_nodes(resource_id):
+	for node in _world.resources.nodes(resource_id):
 		if node == null or not is_instance_valid(node):
 			continue
 		var cell_value = node.get("cell")
@@ -412,56 +429,122 @@ func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
 			continue
 		var cell: Vector2i = cell_value
 		if zone == "player_zone":
-			if _main._is_in_player_zone(cell):
+			if _world.grid.is_in_player_zone(cell):
 				return true
 		elif zone == "rightmost":
-			if rightmost > 0 and cell.x >= max(_main.config.grid_width - rightmost, 0):
+			if rightmost > 0 and cell.x >= max(_world.grid.grid_width - rightmost, 0):
 				return true
 	return false
 
+func _validate_map_for_save(data: Dictionary) -> String:
+	if data.is_empty():
+		return "Map needs path + bases before saving."
+	for resource_id in _world.resources.order:
+		if not _world.resources.defs.has(resource_id):
+			continue
+		var def: Dictionary = _world.resources.defs[resource_id]
+		var rightmost: int = int(def.get("validation_rightmost", 0))
+		if rightmost <= 0:
+			continue
+		if not _has_resource_in_zone(resource_id, "rightmost"):
+			var label: String = str(def.get("label", resource_id)).to_lower()
+			return "Add at least 1 %s in the rightmost %d columns." % [label, min(rightmost, _world.grid.grid_width)]
+	return ""
+
 func build_map_data() -> Dictionary:
-	if _main._base_start_cell == Vector2i(-1, -1) or _main._base_end_cell == Vector2i(-1, -1):
+	var path := _world.path
+	var grid := _world.grid
+	if path.base_start_cell == Vector2i(-1, -1) or path.base_end_cell == Vector2i(-1, -1):
 		return {}
-	if _main.path_cells.is_empty():
+	if path.cells.is_empty():
 		return {}
 	var data := {
-		"grid_width": _main.config.grid_width,
-		"grid_height": _main.config.grid_height,
-		"path": _serialize_cells(_main.path_cells),
-		"base_start": [ _main._base_start_cell.x, _main._base_start_cell.y ],
-		"base_end": [ _main._base_end_cell.x, _main._base_end_cell.y ],
+		"grid_width": grid.grid_width,
+		"grid_height": grid.grid_height,
+		"path": _serialize_cells(path.cells),
+		"base_start": [ path.base_start_cell.x, path.base_start_cell.y ],
+		"base_end": [ path.base_end_cell.x, path.base_end_cell.y ],
 		"enemy_towers": _serialize_cells(_collect_enemy_tower_cells()),
 	}
-	for resource_id in _main._resource_defs.keys():
-		var def: Dictionary = _main._resource_defs[resource_id]
+	for resource_id in _world.resources.defs.keys():
+		var def: Dictionary = _world.resources.defs[resource_id]
 		var map_key: String = str(def.get("map_key", resource_id))
-		data[map_key] = _serialize_cells(_main._collect_resource_cells(resource_id))
+		data[map_key] = _serialize_cells(_collect_resource_cells(resource_id))
 	return data
+
+func refresh_campaign_level_list(select_id: String = "") -> void:
+	if _editor_campaign_select == null:
+		return
+	var level_ids: Array[String] = CampaignManager.get_level_ids()
+	_editor_campaign_select.clear()
+	_editor_campaign_select.add_item("Select Level")
+	_editor_campaign_select.set_item_metadata(0, "")
+	for level_id in level_ids:
+		var label := CampaignManager.get_level_name(level_id)
+		var index := _editor_campaign_select.item_count
+		_editor_campaign_select.add_item("%s (%s)" % [label, level_id])
+		_editor_campaign_select.set_item_metadata(index, level_id)
+	if select_id != "":
+		for i in range(_editor_campaign_select.item_count):
+			if _editor_campaign_select.get_item_metadata(i) == select_id:
+				_editor_campaign_select.select(i)
+				return
+	_editor_campaign_select.select(0)
+
+func get_selected_campaign_level_id() -> String:
+	if _editor_campaign_select == null:
+		return ""
+	var idx := _editor_campaign_select.get_selected_id()
+	var meta: Variant = _editor_campaign_select.get_item_metadata(idx)
+	return "" if meta == null else str(meta)
+
+func _build_campaign_map_data(map_data: Dictionary) -> Dictionary:
+	if map_data.is_empty():
+		return {}
+	var campaign_map := {
+		"grid_width": map_data.get("grid_width", 64),
+		"grid_height": map_data.get("grid_height", 40),
+		"path": map_data.get("path", []),
+		"base_start": map_data.get("base_start", [-1, -1]),
+		"base_end": map_data.get("base_end", [-1, -1]),
+		"enemy_towers": map_data.get("enemy_towers", []),
+		"auto_generate": false
+	}
+	for resource_id in _world.resources.defs.keys():
+		var def: Dictionary = _world.resources.defs[resource_id]
+		var map_key: String = str(def.get("map_key", resource_id))
+		if map_data.has(map_key):
+			campaign_map[map_key] = map_data[map_key]
+	return campaign_map
 
 func apply_map_data(data: Dictionary) -> bool:
 	if data.is_empty():
 		return false
-	_main.config.grid_width = int(data.get("grid_width", _main.config.grid_width))
-	_main.config.grid_height = int(data.get("grid_height", _main.config.grid_height))
-	_main.path_cells = _parse_cells(data.get("path", []))
-	_main._base_start_cell = _parse_vec2i(data.get("base_start", []))
-	_main._base_end_cell = _parse_vec2i(data.get("base_end", []))
-	_main._clear_bases()
-	_main._ordered_path_cells.clear()
-	_main._path_valid = false
+	var grid := _world.grid
+	var path := _world.path
+	grid.grid_width = int(data.get("grid_width", grid.grid_width))
+	grid.grid_height = int(data.get("grid_height", grid.grid_height))
+	_world.config.grid_width = grid.grid_width
+	_world.config.grid_height = grid.grid_height
+	path.cells = _parse_cells(data.get("path", []))
+	path.base_start_cell = _parse_vec2i(data.get("base_start", []))
+	path.base_end_cell = _parse_vec2i(data.get("base_end", []))
+	_world.bases.clear()
+	path.ordered_cells.clear()
+	path.valid = false
 	_main._rebuild_path()
 	if _resource_spawner != null:
 		var resource_cells: Dictionary = {}
-		for resource_id in _main._resource_defs.keys():
-			var def: Dictionary = _main._resource_defs[resource_id]
+		for resource_id in _world.resources.defs.keys():
+			var def: Dictionary = _world.resources.defs[resource_id]
 			var map_key: String = str(def.get("map_key", resource_id))
 			resource_cells[resource_id] = _parse_cells(data.get(map_key, []))
 		_resource_spawner.spawn_from_cells(resource_cells)
-	_main._clear_enemy_towers()
+	_clear_enemy_towers()
 	var enemy_cells := _parse_cells(data.get("enemy_towers", []))
 	for cell in enemy_cells:
 		if _can_place_enemy_tower(cell):
-			_main._place_enemy_tower(cell)
+			_place_enemy_tower(cell)
 	_main.queue_redraw()
 	map_loaded.emit(data)
 	return true
@@ -488,20 +571,40 @@ func _parse_vec2i(raw) -> Vector2i:
 
 func _collect_enemy_tower_cells() -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
-	for cell in _main._enemy_tower_by_cell.keys():
+	for cell in _world.occupancy.enemy_tower_by_cell.keys():
+		cells.append(cell)
+	return cells
+
+func _collect_resource_cells(resource_id: String) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var seen: Dictionary = {}
+	var nodes: Array = _world.resources.nodes(resource_id)
+	for node in nodes:
+		if node == null or not is_instance_valid(node):
+			continue
+		if not node.has_method("get"):
+			continue
+		var cell_value = node.get("cell")
+		if typeof(cell_value) != TYPE_VECTOR2I:
+			continue
+		var cell: Vector2i = cell_value
+		if seen.has(cell):
+			continue
+		seen[cell] = true
 		cells.append(cell)
 	return cells
 
 func start_new_map() -> void:
-	_main.path_cells.clear()
-	_main._ordered_path_cells.clear()
-	_main._path_valid = false
-	_main._base_start_cell = Vector2i(-1, -1)
-	_main._base_end_cell = Vector2i(-1, -1)
-	_main._clear_enemy_towers()
+	var path := _world.path
+	path.cells.clear()
+	path.ordered_cells.clear()
+	path.valid = false
+	path.base_start_cell = Vector2i(-1, -1)
+	path.base_end_cell = Vector2i(-1, -1)
+	_clear_enemy_towers()
 	if _resource_spawner != null:
 		_resource_spawner.clear_resources()
-	_main._clear_bases()
+	_world.bases.clear()
 	_main.queue_redraw()
 
 func export_campaign_level(level_name: String) -> String:
@@ -509,26 +612,10 @@ func export_campaign_level(level_name: String) -> String:
 	if map_data.is_empty():
 		return ""
 
-	# Convert map_data to campaign format
-	var campaign_map := {
-		"grid_width": map_data.get("grid_width", 64),
-		"grid_height": map_data.get("grid_height", 40),
-		"path_cells": map_data.get("path", []),
-		"base_start_cell": map_data.get("base_start", [-1, -1]),
-		"base_end_cell": map_data.get("base_end", [-1, -1]),
-		"resources": {},
-		"enemy_towers": map_data.get("enemy_towers", []),
-		"auto_generate": false
-	}
+	var campaign_map := _build_campaign_map_data(map_data)
+	if campaign_map.is_empty():
+		return ""
 
-	# Collect resources
-	for resource_id in _main._resource_defs.keys():
-		var def: Dictionary = _main._resource_defs[resource_id]
-		var map_key: String = str(def.get("map_key", resource_id))
-		if map_data.has(map_key):
-			campaign_map["resources"][resource_id] = map_data[map_key]
-
-	# Build full campaign level structure
 	var level_id := level_name.to_snake_case().replace(" ", "_")
 	var campaign_level := {
 		"id": level_id,
@@ -575,7 +662,6 @@ func save_campaign_level(level_name: String) -> String:
 	if level_id == "":
 		level_id = "custom_level"
 
-	# Save to user:// for easy access
 	var path := "user://exported_%s.json" % level_id
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
@@ -583,7 +669,72 @@ func save_campaign_level(level_name: String) -> String:
 	file.store_string(json_content)
 	file.close()
 
-	# Also copy to clipboard if available
 	DisplayServer.clipboard_set(json_content)
 
 	return path
+
+func save_campaign_level_to_id(level_id: String, map_data: Dictionary) -> String:
+	if level_id == "":
+		return ""
+	if map_data.is_empty():
+		return ""
+	var campaign_map := _build_campaign_map_data(map_data)
+	if campaign_map.is_empty():
+		return ""
+	var base_data := CampaignManager.get_level_data(level_id)
+	if base_data.is_empty():
+		return ""
+	var updated := base_data.duplicate(true)
+	updated["id"] = level_id
+	updated["map_data"] = campaign_map
+	var json_content := JSON.stringify(updated, "\t")
+	var path := "res://data/campaign/levels/%s.json" % level_id
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return ""
+	file.store_string(json_content)
+	file.close()
+	CampaignManager._load_levels()
+	return path
+
+func _place_enemy_tower(cell: Vector2i) -> void:
+	var grid := _world.grid
+	var script: Script = load("res://scripts/EnemyTower.gd")
+	var tower: Node2D = script.new() as Node2D
+	tower.set("cell", cell)
+	tower.set("cell_size", grid.cell_size)
+	_main.add_child(tower)
+	_world.occupancy.enemy_towers.append(tower)
+	_world.occupancy.enemy_tower_by_cell[cell] = tower
+
+func _remove_enemy_tower_at(cell: Vector2i) -> bool:
+	if not _world.occupancy.enemy_tower_by_cell.has(cell):
+		return false
+	var tower: Node2D = _world.occupancy.enemy_tower_by_cell[cell] as Node2D
+	_world.occupancy.enemy_tower_by_cell.erase(cell)
+	if tower != null and is_instance_valid(tower):
+		_world.occupancy.enemy_towers.erase(tower)
+		tower.queue_free()
+	return true
+
+func _clear_enemy_towers() -> void:
+	for tower in _world.occupancy.enemy_towers:
+		if tower != null and is_instance_valid(tower):
+			tower.queue_free()
+	_world.occupancy.enemy_towers.clear()
+	_world.occupancy.enemy_tower_by_cell.clear()
+
+func _clear_buildings() -> void:
+	var unique: Dictionary = {}
+	for building in _world.occupancy.building_by_cell.values():
+		if building == null or not is_instance_valid(building):
+			continue
+		if unique.has(building):
+			continue
+		unique[building] = true
+		building.queue_free()
+	_world.occupancy.building_by_cell.clear()
+	_world.occupancy.occupied.clear()
+	for node in _main.get_tree().get_nodes_in_group("grunt_towers"):
+		if node != null and is_instance_valid(node):
+			node.queue_free()

@@ -371,15 +371,15 @@ func build(main: Node, ui: UiController) -> void:
 
 	ui.editor_panel = PanelContainer.new()
 	ui.editor_panel.visible = false
-	ui.editor_panel.size = Vector2(300, 320)
+	ui.editor_panel.size = Vector2(300, 360)
 	ui.editor_panel.anchor_left = 0.0
 	ui.editor_panel.anchor_top = 0.5
 	ui.editor_panel.anchor_right = 0.0
 	ui.editor_panel.anchor_bottom = 0.5
 	ui.editor_panel.offset_left = 16
-	ui.editor_panel.offset_top = -160
+	ui.editor_panel.offset_top = -180
 	ui.editor_panel.offset_right = 316
-	ui.editor_panel.offset_bottom = 160
+	ui.editor_panel.offset_bottom = 180
 	main._ui_layer.add_child(ui.editor_panel)
 
 	var editor_box: VBoxContainer = VBoxContainer.new()
@@ -417,10 +417,10 @@ func build(main: Node, ui: UiController) -> void:
 	resource_row.add_theme_constant_override("separation", 6)
 	editor_box.add_child(resource_row)
 
-	for resource_id in main._resource_order:
-		if not main._resource_defs.has(resource_id):
+	for resource_id in main._world.resources.order:
+		if not main._world.resources.defs.has(resource_id):
 			continue
-		var def: Dictionary = main._resource_defs[resource_id]
+		var def: Dictionary = main._world.resources.defs[resource_id]
 		var button: Button = Button.new()
 		button.text = str(def.get("label", resource_id))
 		button.pressed.connect(main._on_editor_tool_pressed.bind(resource_id))
@@ -448,6 +448,13 @@ func build(main: Node, ui: UiController) -> void:
 	ui.editor_name_input.placeholder_text = "example_map"
 	editor_box.add_child(ui.editor_name_input)
 
+	var campaign_label: Label = Label.new()
+	campaign_label.text = "Campaign Level"
+	editor_box.add_child(campaign_label)
+
+	ui.editor_campaign_select = OptionButton.new()
+	editor_box.add_child(ui.editor_campaign_select)
+
 	var save_row: HBoxContainer = HBoxContainer.new()
 	save_row.add_theme_constant_override("separation", 6)
 	editor_box.add_child(save_row)
@@ -463,7 +470,7 @@ func build(main: Node, ui: UiController) -> void:
 	save_row.add_child(load_button)
 
 	var export_button: Button = Button.new()
-	export_button.text = "Export Campaign"
+	export_button.text = "Save Campaign"
 	export_button.pressed.connect(main._on_editor_export_campaign_pressed)
 	save_row.add_child(export_button)
 
