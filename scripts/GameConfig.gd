@@ -14,6 +14,7 @@ class_name GameConfig
 @export var path_length_multiplier: float = 2.0
 @export var player_zone_width: int = 7
 @export var tree_count: int = 18
+@export var tree_clear_wood: int = 10
 @export var stone_count: int = 8
 @export var iron_count: int = 4
 @export var starting_wood: int = 20

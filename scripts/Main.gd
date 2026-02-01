@@ -41,6 +41,7 @@ var _build_buttons: Dictionary = {}
 var _building_defs: Dictionary = {}
 var _build_mode := "grunt_tower"
 var _editor_active := false
+var _pending_tree_clear_cell := Vector2i(-1, -1)
 
 func _ready() -> void:
 	if config == null:
@@ -132,6 +133,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if config.enable_path_edit and event.shift_pressed:
 			_add_path_cell(world_pos)
 		else:
+			if _build_mode == "" and _handle_tree_clear_click(world_pos):
+				return
 			if _is_over_player_base(world_pos):
 				_upgrade_manager.show_upgrade_modal("base", _world.bases.end)
 				return
@@ -143,6 +146,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_placement.handle_build_click(world_pos, _build_mode)
 			return
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_clear_pending_tree_clear()
 		if config.enable_path_edit and event.shift_pressed:
 			_remove_path_cell(get_global_mouse_position())
 		else:
@@ -436,8 +440,61 @@ func _spawn_units_by_id(unit_id: String, count: int) -> void:
 	for i in range(count):
 		_unit_spawner.spawn_unit(unit_id, def)
 
+func _handle_tree_clear_click(world_pos: Vector2) -> bool:
+	if _world == null or _world.resources == null or _world.grid == null:
+		return false
+	if not _world.resources.defs.has("tree"):
+		return false
+	var grid := _world.grid
+	var cell := Vector2i(int(world_pos.x / grid.cell_size), int(world_pos.y / grid.cell_size))
+	if not grid.is_in_bounds(cell):
+		_clear_pending_tree_clear()
+		return false
+	var tree_map: Dictionary = _world.resources.by_cell("tree")
+	if not tree_map.has(cell):
+		_clear_pending_tree_clear()
+		return false
+	var tree_node := tree_map[cell] as Node2D
+	if tree_node == null or not is_instance_valid(tree_node):
+		_clear_pending_tree_clear()
+		return false
+	var top_left: Vector2i = tree_node.get("cell")
+	if _pending_tree_clear_cell == top_left:
+		_clear_tree_resource(top_left)
+		_clear_pending_tree_clear()
+		return true
+	_pending_tree_clear_cell = top_left
+	_update_tree_clear_label()
+	queue_redraw()
+	return true
+
+func _clear_tree_resource(cell: Vector2i) -> void:
+	if _resource_spawner == null:
+		return
+	if _resource_spawner.remove_resource_at(cell):
+		if _economy != null:
+			_economy.add_wood(config.tree_clear_wood)
+
+func _clear_pending_tree_clear() -> void:
+	if _pending_tree_clear_cell == Vector2i(-1, -1):
+		return
+	_pending_tree_clear_cell = Vector2i(-1, -1)
+	_update_tree_clear_label()
+	queue_redraw()
+
+func _update_tree_clear_label() -> void:
+	if _ui_controller == null:
+		return
+	if _build_mode != "":
+		return
+	if _pending_tree_clear_cell == Vector2i(-1, -1):
+		_ui_controller.set_build_label_text("Build: ")
+	else:
+		_ui_controller.set_build_label_text("Clear Tree? Click again (+%dW)" % config.tree_clear_wood)
+
 # Game state methods
 func _reset_game() -> void:
+	_clear_pending_tree_clear()
 	_clear_constructions()
 	_clear_buildings()
 	_clear_enemy_towers()
@@ -460,6 +517,7 @@ func _reset_game() -> void:
 	queue_redraw()
 
 func _reset_for_play() -> void:
+	_clear_pending_tree_clear()
 	_clear_units()
 	_clear_constructions()
 	_clear_buildings()
@@ -555,6 +613,7 @@ func _update_upgrade_button_text() -> void:
 
 func _set_build_mode(mode: String) -> void:
 	_build_mode = mode
+	_clear_pending_tree_clear()
 	if _ui_controller != null:
 		if _building_defs.has(mode):
 			var def: Dictionary = _building_defs[mode]
@@ -1036,9 +1095,27 @@ func _draw() -> void:
 	if _editor_active:
 		_map_editor.draw(self)
 	_draw_grid()
+	_draw_tree_clear_indicator()
 	if _placement != null:
 		_placement.draw_hover(self, _build_mode)
 	_draw_fog_of_war()
+
+func _draw_tree_clear_indicator() -> void:
+	if _pending_tree_clear_cell == Vector2i(-1, -1):
+		return
+	if _world == null or _world.resources == null or _world.grid == null:
+		return
+	var def: Dictionary = _world.resources.defs.get("tree", {})
+	var size: int = int(def.get("size", 2))
+	var grid := _world.grid
+	if _world.fog.enabled and not _editor_active and _pending_tree_clear_cell.x < _world.fog.revealed_column:
+		return
+	var color := Color(0.9, 0.4, 0.1, 0.35)
+	for x in range(size):
+		for y in range(size):
+			var cell := _pending_tree_clear_cell + Vector2i(x, y)
+			var rect := Rect2(cell.x * grid.cell_size, cell.y * grid.cell_size, grid.cell_size, grid.cell_size)
+			draw_rect(rect, color, true)
 
 func _draw_grid() -> void:
 	var grid := _world.grid
