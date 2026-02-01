@@ -78,6 +78,7 @@ func build(main: Node, ui: UiController) -> void:
 
 	ui.build_label = Label.new()
 	ui.build_label.text = "Build: "
+	ui.build_label.add_theme_font_size_override("font_size", 24)
 
 	main._upgrade_button = null
 

@@ -384,19 +384,25 @@ func _build_spawn_buttons() -> void:
 		var button := Button.new()
 		var label: String = str(def.get("label", unit_id))
 		var cost_label: String = _unit_cost_label(def)
-		button.text = label if cost_label == "" else "%s (%s)" % [label, cost_label]
+		button.text = label
+		if cost_label != "":
+			button.tooltip_text = "Cost: %s" % cost_label
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.size_flags_stretch_ratio = 2.0
 		button.pressed.connect(Callable(self, "_spawn_unit_by_id").bind(unit_id))
 		button_row.add_child(button)
 		var button_ten := Button.new()
 		button_ten.text = "+10"
+		if cost_label != "":
+			button_ten.tooltip_text = "Cost: %s" % _unit_cost_label_scaled(def, 10)
 		button_ten.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button_ten.size_flags_stretch_ratio = 1.0
 		button_ten.pressed.connect(Callable(self, "_spawn_units_by_id").bind(unit_id, 10))
 		button_row.add_child(button_ten)
 		var button_twenty_five := Button.new()
 		button_twenty_five.text = "+25"
+		if cost_label != "":
+			button_twenty_five.tooltip_text = "Cost: %s" % _unit_cost_label_scaled(def, 25)
 		button_twenty_five.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button_twenty_five.size_flags_stretch_ratio = 1.0
 		button_twenty_five.pressed.connect(Callable(self, "_spawn_units_by_id").bind(unit_id, 25))
@@ -414,6 +420,24 @@ func _unit_cost_label(def: Dictionary) -> String:
 	var wood_cost: int = def.get("wood_cost", 0)
 	var stone_cost: int = def.get("stone_cost", 0)
 	var iron_cost: int = def.get("iron_cost", 0)
+	if food_cost > 0:
+		parts.append("%dF" % food_cost)
+	if wood_cost > 0:
+		parts.append("%dW" % wood_cost)
+	if stone_cost > 0:
+		parts.append("%dS" % stone_cost)
+	if iron_cost > 0:
+		parts.append("%dI" % iron_cost)
+	return "+".join(parts)
+
+func _unit_cost_label_scaled(def: Dictionary, multiplier: int) -> String:
+	if multiplier <= 1:
+		return _unit_cost_label(def)
+	var parts: Array[String] = []
+	var food_cost: int = def.get("food_cost", 0) * multiplier
+	var wood_cost: int = def.get("wood_cost", 0) * multiplier
+	var stone_cost: int = def.get("stone_cost", 0) * multiplier
+	var iron_cost: int = def.get("iron_cost", 0) * multiplier
 	if food_cost > 0:
 		parts.append("%dF" % food_cost)
 	if wood_cost > 0:
