@@ -48,6 +48,47 @@ var editor_name_input: LineEdit
 var editor_campaign_select: OptionButton
 var editor_status_label: Label
 var editor_tool_label: Label
+var editor_campaign_panel: PanelContainer
+var editor_campaign_name: LineEdit
+var editor_campaign_lore: TextEdit
+var editor_campaign_order: SpinBox
+var editor_campaign_max_base: SpinBox
+var editor_campaign_units: LineEdit
+var editor_campaign_buildings: LineEdit
+var editor_campaign_challenge_modes: LineEdit
+var editor_campaign_easy_spawn: SpinBox
+var editor_campaign_easy_enemy_hp: SpinBox
+var editor_campaign_easy_enemy_damage: SpinBox
+var editor_campaign_easy_enemy_base_hp: SpinBox
+var editor_campaign_easy_res_wood: SpinBox
+var editor_campaign_easy_res_food: SpinBox
+var editor_campaign_easy_res_stone: SpinBox
+var editor_campaign_easy_res_iron: SpinBox
+var editor_campaign_easy_star_time: SpinBox
+var editor_campaign_easy_star_base_hp: SpinBox
+var editor_campaign_easy_star_units: SpinBox
+var editor_campaign_medium_spawn: SpinBox
+var editor_campaign_medium_enemy_hp: SpinBox
+var editor_campaign_medium_enemy_damage: SpinBox
+var editor_campaign_medium_enemy_base_hp: SpinBox
+var editor_campaign_medium_res_wood: SpinBox
+var editor_campaign_medium_res_food: SpinBox
+var editor_campaign_medium_res_stone: SpinBox
+var editor_campaign_medium_res_iron: SpinBox
+var editor_campaign_medium_star_time: SpinBox
+var editor_campaign_medium_star_base_hp: SpinBox
+var editor_campaign_medium_star_units: SpinBox
+var editor_campaign_hard_spawn: SpinBox
+var editor_campaign_hard_enemy_hp: SpinBox
+var editor_campaign_hard_enemy_damage: SpinBox
+var editor_campaign_hard_enemy_base_hp: SpinBox
+var editor_campaign_hard_res_wood: SpinBox
+var editor_campaign_hard_res_food: SpinBox
+var editor_campaign_hard_res_stone: SpinBox
+var editor_campaign_hard_res_iron: SpinBox
+var editor_campaign_hard_star_time: SpinBox
+var editor_campaign_hard_star_base_hp: SpinBox
+var editor_campaign_hard_star_units: SpinBox
 
 func validate() -> void:
 	_validate_wiring()

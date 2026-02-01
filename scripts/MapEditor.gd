@@ -24,6 +24,49 @@ var _editor_name_input: LineEdit
 var _editor_campaign_select: OptionButton
 var _editor_status_label: Label
 var _editor_tool_label: Label
+var _editor_campaign_panel: PanelContainer
+var _editor_campaign_name: LineEdit
+var _editor_campaign_lore: TextEdit
+var _editor_campaign_order: SpinBox
+var _editor_campaign_max_base: SpinBox
+var _editor_campaign_units: LineEdit
+var _editor_campaign_buildings: LineEdit
+var _editor_campaign_challenge_modes: LineEdit
+var _editor_campaign_easy_spawn: SpinBox
+var _editor_campaign_easy_enemy_hp: SpinBox
+var _editor_campaign_easy_enemy_damage: SpinBox
+var _editor_campaign_easy_enemy_base_hp: SpinBox
+var _editor_campaign_easy_res_wood: SpinBox
+var _editor_campaign_easy_res_food: SpinBox
+var _editor_campaign_easy_res_stone: SpinBox
+var _editor_campaign_easy_res_iron: SpinBox
+var _editor_campaign_easy_star_time: SpinBox
+var _editor_campaign_easy_star_base_hp: SpinBox
+var _editor_campaign_easy_star_units: SpinBox
+var _editor_campaign_medium_spawn: SpinBox
+var _editor_campaign_medium_enemy_hp: SpinBox
+var _editor_campaign_medium_enemy_damage: SpinBox
+var _editor_campaign_medium_enemy_base_hp: SpinBox
+var _editor_campaign_medium_res_wood: SpinBox
+var _editor_campaign_medium_res_food: SpinBox
+var _editor_campaign_medium_res_stone: SpinBox
+var _editor_campaign_medium_res_iron: SpinBox
+var _editor_campaign_medium_star_time: SpinBox
+var _editor_campaign_medium_star_base_hp: SpinBox
+var _editor_campaign_medium_star_units: SpinBox
+var _editor_campaign_hard_spawn: SpinBox
+var _editor_campaign_hard_enemy_hp: SpinBox
+var _editor_campaign_hard_enemy_damage: SpinBox
+var _editor_campaign_hard_enemy_base_hp: SpinBox
+var _editor_campaign_hard_res_wood: SpinBox
+var _editor_campaign_hard_res_food: SpinBox
+var _editor_campaign_hard_res_stone: SpinBox
+var _editor_campaign_hard_res_iron: SpinBox
+var _editor_campaign_hard_star_time: SpinBox
+var _editor_campaign_hard_star_base_hp: SpinBox
+var _editor_campaign_hard_star_units: SpinBox
+
+var _editing_campaign_level_id := ""
 
 func setup(main_node: Node, world: GameWorld, resource_spawner_node: Node) -> void:
 	_main = main_node
@@ -39,6 +82,47 @@ func _sync_ui_refs() -> void:
 	_editor_campaign_select = _main._ui_controller.editor_campaign_select
 	_editor_status_label = _main._ui_controller.editor_status_label
 	_editor_tool_label = _main._ui_controller.editor_tool_label
+	_editor_campaign_panel = _main._ui_controller.editor_campaign_panel
+	_editor_campaign_name = _main._ui_controller.editor_campaign_name
+	_editor_campaign_lore = _main._ui_controller.editor_campaign_lore
+	_editor_campaign_order = _main._ui_controller.editor_campaign_order
+	_editor_campaign_max_base = _main._ui_controller.editor_campaign_max_base
+	_editor_campaign_units = _main._ui_controller.editor_campaign_units
+	_editor_campaign_buildings = _main._ui_controller.editor_campaign_buildings
+	_editor_campaign_challenge_modes = _main._ui_controller.editor_campaign_challenge_modes
+	_editor_campaign_easy_spawn = _main._ui_controller.editor_campaign_easy_spawn
+	_editor_campaign_easy_enemy_hp = _main._ui_controller.editor_campaign_easy_enemy_hp
+	_editor_campaign_easy_enemy_damage = _main._ui_controller.editor_campaign_easy_enemy_damage
+	_editor_campaign_easy_enemy_base_hp = _main._ui_controller.editor_campaign_easy_enemy_base_hp
+	_editor_campaign_easy_res_wood = _main._ui_controller.editor_campaign_easy_res_wood
+	_editor_campaign_easy_res_food = _main._ui_controller.editor_campaign_easy_res_food
+	_editor_campaign_easy_res_stone = _main._ui_controller.editor_campaign_easy_res_stone
+	_editor_campaign_easy_res_iron = _main._ui_controller.editor_campaign_easy_res_iron
+	_editor_campaign_easy_star_time = _main._ui_controller.editor_campaign_easy_star_time
+	_editor_campaign_easy_star_base_hp = _main._ui_controller.editor_campaign_easy_star_base_hp
+	_editor_campaign_easy_star_units = _main._ui_controller.editor_campaign_easy_star_units
+	_editor_campaign_medium_spawn = _main._ui_controller.editor_campaign_medium_spawn
+	_editor_campaign_medium_enemy_hp = _main._ui_controller.editor_campaign_medium_enemy_hp
+	_editor_campaign_medium_enemy_damage = _main._ui_controller.editor_campaign_medium_enemy_damage
+	_editor_campaign_medium_enemy_base_hp = _main._ui_controller.editor_campaign_medium_enemy_base_hp
+	_editor_campaign_medium_res_wood = _main._ui_controller.editor_campaign_medium_res_wood
+	_editor_campaign_medium_res_food = _main._ui_controller.editor_campaign_medium_res_food
+	_editor_campaign_medium_res_stone = _main._ui_controller.editor_campaign_medium_res_stone
+	_editor_campaign_medium_res_iron = _main._ui_controller.editor_campaign_medium_res_iron
+	_editor_campaign_medium_star_time = _main._ui_controller.editor_campaign_medium_star_time
+	_editor_campaign_medium_star_base_hp = _main._ui_controller.editor_campaign_medium_star_base_hp
+	_editor_campaign_medium_star_units = _main._ui_controller.editor_campaign_medium_star_units
+	_editor_campaign_hard_spawn = _main._ui_controller.editor_campaign_hard_spawn
+	_editor_campaign_hard_enemy_hp = _main._ui_controller.editor_campaign_hard_enemy_hp
+	_editor_campaign_hard_enemy_damage = _main._ui_controller.editor_campaign_hard_enemy_damage
+	_editor_campaign_hard_enemy_base_hp = _main._ui_controller.editor_campaign_hard_enemy_base_hp
+	_editor_campaign_hard_res_wood = _main._ui_controller.editor_campaign_hard_res_wood
+	_editor_campaign_hard_res_food = _main._ui_controller.editor_campaign_hard_res_food
+	_editor_campaign_hard_res_stone = _main._ui_controller.editor_campaign_hard_res_stone
+	_editor_campaign_hard_res_iron = _main._ui_controller.editor_campaign_hard_res_iron
+	_editor_campaign_hard_star_time = _main._ui_controller.editor_campaign_hard_star_time
+	_editor_campaign_hard_star_base_hp = _main._ui_controller.editor_campaign_hard_star_base_hp
+	_editor_campaign_hard_star_units = _main._ui_controller.editor_campaign_hard_star_units
 
 func is_active() -> bool:
 	return active
@@ -69,6 +153,7 @@ func set_active(is_active: bool) -> void:
 		_main.queue_redraw()
 		editor_activated.emit()
 	else:
+		close_campaign_editor()
 		editor_deactivated.emit()
 
 func set_tool(new_tool: String) -> void:
@@ -396,27 +481,228 @@ func load_map() -> void:
 	else:
 		set_status("Invalid map data.")
 
-func export_campaign() -> void:
+func load_campaign_map() -> void:
 	var level_id := get_selected_campaign_level_id()
 	if level_id == "":
-		set_status("Select a campaign level to save.")
+		set_status("Select a campaign level to load.")
+		return
+	var level_data := CampaignManager.get_level_data(level_id)
+	var data: Dictionary = level_data.get("map_data", {})
+	if data.is_empty():
+		set_status("Campaign map missing data.")
+		return
+	if apply_map_data(data):
+		map_data = data
+		use_custom_map = true
+		if _editor_name_input != null:
+			_editor_name_input.text = level_id
+		set_status("Loaded campaign: %s" % level_id)
+	else:
+		set_status("Invalid campaign map data.")
+
+func export_campaign() -> void:
+	open_campaign_editor()
+
+func open_campaign_editor() -> void:
+	var level_id := get_selected_campaign_level_id()
+	if level_id == "":
+		set_status("Select a campaign level to edit.")
+		return
+	var level_data := CampaignManager.get_level_data(level_id)
+	if level_data.is_empty():
+		set_status("Campaign level data not found.")
+		return
+	_editing_campaign_level_id = level_id
+	if _editor_campaign_panel != null:
+		_editor_campaign_panel.visible = true
+	_populate_campaign_editor(level_data)
+
+func close_campaign_editor() -> void:
+	_editing_campaign_level_id = ""
+	if _editor_campaign_panel != null:
+		_editor_campaign_panel.visible = false
+
+func save_campaign_edits() -> void:
+	if _editing_campaign_level_id == "":
+		set_status("Select a campaign level to edit.")
 		return
 	var data: Dictionary = build_map_data()
 	var error := _validate_map_for_save(data)
 	if error != "":
 		set_status(error)
 		return
-	var path: String = save_campaign_level_to_id(level_id, data)
+	var extra := _collect_campaign_editor_data()
+	var path: String = save_campaign_level_to_id(_editing_campaign_level_id, data, extra)
 	if path == "":
 		set_status("Save failed. Check campaign level data.")
-	else:
-		set_status("Saved campaign level: %s" % level_id)
+		return
+	set_status("Saved campaign level: %s" % _editing_campaign_level_id)
+	refresh_campaign_level_list(_editing_campaign_level_id)
+	close_campaign_editor()
 
 func exit_to_menu() -> void:
 	map_data = build_map_data()
 	use_custom_map = not map_data.is_empty()
 	_main._set_editor_active(false)
 	_main._game_state_manager.set_splash_active(true)
+
+func _populate_campaign_editor(level_data: Dictionary) -> void:
+	if _editor_campaign_name != null:
+		_editor_campaign_name.text = str(level_data.get("name", ""))
+	if _editor_campaign_lore != null:
+		_editor_campaign_lore.text = str(level_data.get("lore", ""))
+	if _editor_campaign_order != null:
+		_editor_campaign_order.value = float(level_data.get("campaign_order", 0))
+	if _editor_campaign_max_base != null:
+		_editor_campaign_max_base.value = float(level_data.get("max_base_level", 4))
+	if _editor_campaign_units != null:
+		_editor_campaign_units.text = ", ".join(level_data.get("available_units", []))
+	if _editor_campaign_buildings != null:
+		_editor_campaign_buildings.text = ", ".join(level_data.get("available_buildings", []))
+	if _editor_campaign_challenge_modes != null:
+		_editor_campaign_challenge_modes.text = ", ".join(level_data.get("challenge_modes", []))
+
+	var configs: Dictionary = level_data.get("difficulty_configs", {})
+	_set_difficulty_fields("easy", configs.get("easy", {}))
+	_set_difficulty_fields("medium", configs.get("medium", {}))
+	_set_difficulty_fields("hard", configs.get("hard", {}))
+
+func _collect_campaign_editor_data() -> Dictionary:
+	var result := {}
+	if _editor_campaign_name != null:
+		result["name"] = _editor_campaign_name.text.strip_edges()
+	if _editor_campaign_lore != null:
+		result["lore"] = _editor_campaign_lore.text.strip_edges()
+	if _editor_campaign_order != null:
+		result["campaign_order"] = int(_editor_campaign_order.value)
+	if _editor_campaign_max_base != null:
+		result["max_base_level"] = int(_editor_campaign_max_base.value)
+	if _editor_campaign_units != null:
+		result["available_units"] = _read_csv_list(_editor_campaign_units.text)
+	if _editor_campaign_buildings != null:
+		result["available_buildings"] = _read_csv_list(_editor_campaign_buildings.text)
+	if _editor_campaign_challenge_modes != null:
+		result["challenge_modes"] = _read_csv_list(_editor_campaign_challenge_modes.text)
+	result["difficulty_configs"] = {
+		"easy": _collect_difficulty_fields("easy"),
+		"medium": _collect_difficulty_fields("medium"),
+		"hard": _collect_difficulty_fields("hard")
+	}
+	return result
+
+func _read_csv_list(text: String) -> Array:
+	var items: Array = []
+	for raw in text.split(",", false):
+		var item := raw.strip_edges()
+		if item != "":
+			items.append(item)
+	return items
+
+func _set_difficulty_fields(key: String, data: Dictionary) -> void:
+	var starting: Dictionary = data.get("starting_resources", {}) as Dictionary
+	var stars: Dictionary = data.get("star_thresholds", {}) as Dictionary
+	if key == "easy":
+		_set_spinbox_value(_editor_campaign_easy_spawn, data.get("spawn_interval", 2.5))
+		_set_spinbox_value(_editor_campaign_easy_enemy_hp, data.get("enemy_hp_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_easy_enemy_damage, data.get("enemy_damage_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_easy_enemy_base_hp, data.get("enemy_base_hp_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_easy_res_wood, starting.get("wood", 0))
+		_set_spinbox_value(_editor_campaign_easy_res_food, starting.get("food", 0))
+		_set_spinbox_value(_editor_campaign_easy_res_stone, starting.get("stone", 0))
+		_set_spinbox_value(_editor_campaign_easy_res_iron, starting.get("iron", 0))
+		_set_spinbox_value(_editor_campaign_easy_star_time, stars.get("time", 0))
+		_set_spinbox_value(_editor_campaign_easy_star_base_hp, stars.get("base_hp_percent", 0))
+		_set_spinbox_value(_editor_campaign_easy_star_units, stars.get("units_lost", 0))
+	elif key == "medium":
+		_set_spinbox_value(_editor_campaign_medium_spawn, data.get("spawn_interval", 1.5))
+		_set_spinbox_value(_editor_campaign_medium_enemy_hp, data.get("enemy_hp_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_medium_enemy_damage, data.get("enemy_damage_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_medium_enemy_base_hp, data.get("enemy_base_hp_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_medium_res_wood, starting.get("wood", 0))
+		_set_spinbox_value(_editor_campaign_medium_res_food, starting.get("food", 0))
+		_set_spinbox_value(_editor_campaign_medium_res_stone, starting.get("stone", 0))
+		_set_spinbox_value(_editor_campaign_medium_res_iron, starting.get("iron", 0))
+		_set_spinbox_value(_editor_campaign_medium_star_time, stars.get("time", 0))
+		_set_spinbox_value(_editor_campaign_medium_star_base_hp, stars.get("base_hp_percent", 0))
+		_set_spinbox_value(_editor_campaign_medium_star_units, stars.get("units_lost", 0))
+	elif key == "hard":
+		_set_spinbox_value(_editor_campaign_hard_spawn, data.get("spawn_interval", 1.0))
+		_set_spinbox_value(_editor_campaign_hard_enemy_hp, data.get("enemy_hp_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_hard_enemy_damage, data.get("enemy_damage_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_hard_enemy_base_hp, data.get("enemy_base_hp_multiplier", 1.0))
+		_set_spinbox_value(_editor_campaign_hard_res_wood, starting.get("wood", 0))
+		_set_spinbox_value(_editor_campaign_hard_res_food, starting.get("food", 0))
+		_set_spinbox_value(_editor_campaign_hard_res_stone, starting.get("stone", 0))
+		_set_spinbox_value(_editor_campaign_hard_res_iron, starting.get("iron", 0))
+		_set_spinbox_value(_editor_campaign_hard_star_time, stars.get("time", 0))
+		_set_spinbox_value(_editor_campaign_hard_star_base_hp, stars.get("base_hp_percent", 0))
+		_set_spinbox_value(_editor_campaign_hard_star_units, stars.get("units_lost", 0))
+
+func _collect_difficulty_fields(key: String) -> Dictionary:
+	if key == "easy":
+		return {
+			"spawn_interval": _read_spinbox_value(_editor_campaign_easy_spawn, 2.5),
+			"enemy_hp_multiplier": _read_spinbox_value(_editor_campaign_easy_enemy_hp, 1.0),
+			"enemy_damage_multiplier": _read_spinbox_value(_editor_campaign_easy_enemy_damage, 1.0),
+			"enemy_base_hp_multiplier": _read_spinbox_value(_editor_campaign_easy_enemy_base_hp, 1.0),
+			"starting_resources": {
+				"wood": _read_spinbox_value(_editor_campaign_easy_res_wood, 0),
+				"food": _read_spinbox_value(_editor_campaign_easy_res_food, 0),
+				"stone": _read_spinbox_value(_editor_campaign_easy_res_stone, 0),
+				"iron": _read_spinbox_value(_editor_campaign_easy_res_iron, 0)
+			},
+			"star_thresholds": {
+				"time": _read_spinbox_value(_editor_campaign_easy_star_time, 0),
+				"base_hp_percent": _read_spinbox_value(_editor_campaign_easy_star_base_hp, 0),
+				"units_lost": _read_spinbox_value(_editor_campaign_easy_star_units, 0)
+			}
+		}
+	if key == "medium":
+		return {
+			"spawn_interval": _read_spinbox_value(_editor_campaign_medium_spawn, 1.5),
+			"enemy_hp_multiplier": _read_spinbox_value(_editor_campaign_medium_enemy_hp, 1.0),
+			"enemy_damage_multiplier": _read_spinbox_value(_editor_campaign_medium_enemy_damage, 1.0),
+			"enemy_base_hp_multiplier": _read_spinbox_value(_editor_campaign_medium_enemy_base_hp, 1.0),
+			"starting_resources": {
+				"wood": _read_spinbox_value(_editor_campaign_medium_res_wood, 0),
+				"food": _read_spinbox_value(_editor_campaign_medium_res_food, 0),
+				"stone": _read_spinbox_value(_editor_campaign_medium_res_stone, 0),
+				"iron": _read_spinbox_value(_editor_campaign_medium_res_iron, 0)
+			},
+			"star_thresholds": {
+				"time": _read_spinbox_value(_editor_campaign_medium_star_time, 0),
+				"base_hp_percent": _read_spinbox_value(_editor_campaign_medium_star_base_hp, 0),
+				"units_lost": _read_spinbox_value(_editor_campaign_medium_star_units, 0)
+			}
+		}
+	if key == "hard":
+		return {
+			"spawn_interval": _read_spinbox_value(_editor_campaign_hard_spawn, 1.0),
+			"enemy_hp_multiplier": _read_spinbox_value(_editor_campaign_hard_enemy_hp, 1.0),
+			"enemy_damage_multiplier": _read_spinbox_value(_editor_campaign_hard_enemy_damage, 1.0),
+			"enemy_base_hp_multiplier": _read_spinbox_value(_editor_campaign_hard_enemy_base_hp, 1.0),
+			"starting_resources": {
+				"wood": _read_spinbox_value(_editor_campaign_hard_res_wood, 0),
+				"food": _read_spinbox_value(_editor_campaign_hard_res_food, 0),
+				"stone": _read_spinbox_value(_editor_campaign_hard_res_stone, 0),
+				"iron": _read_spinbox_value(_editor_campaign_hard_res_iron, 0)
+			},
+			"star_thresholds": {
+				"time": _read_spinbox_value(_editor_campaign_hard_star_time, 0),
+				"base_hp_percent": _read_spinbox_value(_editor_campaign_hard_star_base_hp, 0),
+				"units_lost": _read_spinbox_value(_editor_campaign_hard_star_units, 0)
+			}
+		}
+	return {}
+
+func _set_spinbox_value(box: SpinBox, value: Variant) -> void:
+	if box != null:
+		box.value = float(value)
+
+func _read_spinbox_value(box: SpinBox, fallback: float) -> float:
+	if box == null:
+		return fallback
+	return float(box.value)
 
 func _has_resource_in_zone(resource_id: String, zone: String) -> bool:
 	var def: Dictionary = _world.resources.defs.get(resource_id, {})
@@ -673,7 +959,7 @@ func save_campaign_level(level_name: String) -> String:
 
 	return path
 
-func save_campaign_level_to_id(level_id: String, map_data: Dictionary) -> String:
+func save_campaign_level_to_id(level_id: String, map_data: Dictionary, extra_data: Dictionary = {}) -> String:
 	if level_id == "":
 		return ""
 	if map_data.is_empty():
@@ -685,6 +971,8 @@ func save_campaign_level_to_id(level_id: String, map_data: Dictionary) -> String
 	if base_data.is_empty():
 		return ""
 	var updated := base_data.duplicate(true)
+	for key in extra_data.keys():
+		updated[key] = extra_data[key]
 	updated["id"] = level_id
 	updated["map_data"] = campaign_map
 	var json_content := JSON.stringify(updated, "\t")

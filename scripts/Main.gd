@@ -975,8 +975,17 @@ func _on_editor_save_pressed() -> void:
 func _on_editor_load_pressed() -> void:
 	_map_editor.load_map()
 
+func _on_editor_load_campaign_pressed() -> void:
+	_map_editor.load_campaign_map()
+
 func _on_editor_export_campaign_pressed() -> void:
 	_map_editor.export_campaign()
+
+func _on_editor_campaign_edit_save_pressed() -> void:
+	_map_editor.save_campaign_edits()
+
+func _on_editor_campaign_edit_cancel_pressed() -> void:
+	_map_editor.close_campaign_editor()
 
 func _on_editor_back_pressed() -> void:
 	_map_editor.exit_to_menu()

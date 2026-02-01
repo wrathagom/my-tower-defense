@@ -10,7 +10,7 @@
 	"available_units": [
 		"grunt"
 	],
-	"campaign_order": 1.0,
+	"campaign_order": 1,
 	"challenge_modes": [],
 	"difficulty_configs": {
 		"easy": {
@@ -1173,6 +1173,6 @@
 			]
 		]
 	},
-	"max_base_level": 1.0,
+	"max_base_level": 1,
 	"name": "The Outpost"
 }

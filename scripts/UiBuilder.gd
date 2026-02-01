@@ -470,6 +470,11 @@ func build(main: Node, ui: UiController) -> void:
 	load_button.pressed.connect(main._on_editor_load_pressed)
 	save_row.add_child(load_button)
 
+	var load_campaign_button: Button = Button.new()
+	load_campaign_button.text = "Load Campaign"
+	load_campaign_button.pressed.connect(main._on_editor_load_campaign_pressed)
+	save_row.add_child(load_campaign_button)
+
 	var export_button: Button = Button.new()
 	export_button.text = "Save Campaign"
 	export_button.pressed.connect(main._on_editor_export_campaign_pressed)
@@ -478,6 +483,104 @@ func build(main: Node, ui: UiController) -> void:
 	ui.editor_status_label = Label.new()
 	ui.editor_status_label.text = ""
 	editor_box.add_child(ui.editor_status_label)
+
+	ui.editor_campaign_panel = PanelContainer.new()
+	ui.editor_campaign_panel.visible = false
+	ui.editor_campaign_panel.anchor_left = 1.0
+	ui.editor_campaign_panel.anchor_top = 0.5
+	ui.editor_campaign_panel.anchor_right = 1.0
+	ui.editor_campaign_panel.anchor_bottom = 0.5
+	ui.editor_campaign_panel.offset_left = -576
+	ui.editor_campaign_panel.offset_right = -16
+	ui.editor_campaign_panel.offset_top = -310
+	ui.editor_campaign_panel.offset_bottom = 310
+	main._ui_layer.add_child(ui.editor_campaign_panel)
+
+	var campaign_scroll := ScrollContainer.new()
+	campaign_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	campaign_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	ui.editor_campaign_panel.add_child(campaign_scroll)
+
+	var campaign_box := VBoxContainer.new()
+	campaign_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	campaign_box.add_theme_constant_override("separation", 8)
+	campaign_scroll.add_child(campaign_box)
+
+	var campaign_title := Label.new()
+	campaign_title.text = "Campaign Level Settings"
+	campaign_box.add_child(campaign_title)
+
+	var campaign_name_label: Label = Label.new()
+	campaign_name_label.text = "Name"
+	campaign_box.add_child(campaign_name_label)
+	ui.editor_campaign_name = LineEdit.new()
+	campaign_box.add_child(ui.editor_campaign_name)
+
+	var lore_label: Label = Label.new()
+	lore_label.text = "Lore"
+	campaign_box.add_child(lore_label)
+	ui.editor_campaign_lore = TextEdit.new()
+	ui.editor_campaign_lore.custom_minimum_size = Vector2(0, 120)
+	ui.editor_campaign_lore.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	campaign_box.add_child(ui.editor_campaign_lore)
+
+	var order_row := HBoxContainer.new()
+	order_row.add_theme_constant_override("separation", 8)
+	campaign_box.add_child(order_row)
+	var order_label: Label = Label.new()
+	order_label.text = "Campaign Order"
+	order_row.add_child(order_label)
+	ui.editor_campaign_order = SpinBox.new()
+	ui.editor_campaign_order.min_value = 0
+	ui.editor_campaign_order.max_value = 999
+	ui.editor_campaign_order.step = 1
+	order_row.add_child(ui.editor_campaign_order)
+
+	var max_base_row := HBoxContainer.new()
+	max_base_row.add_theme_constant_override("separation", 8)
+	campaign_box.add_child(max_base_row)
+	var max_base_label: Label = Label.new()
+	max_base_label.text = "Max Base Level"
+	max_base_row.add_child(max_base_label)
+	ui.editor_campaign_max_base = SpinBox.new()
+	ui.editor_campaign_max_base.min_value = 1
+	ui.editor_campaign_max_base.max_value = 10
+	ui.editor_campaign_max_base.step = 1
+	max_base_row.add_child(ui.editor_campaign_max_base)
+
+	var units_label: Label = Label.new()
+	units_label.text = "Available Units (comma-separated)"
+	campaign_box.add_child(units_label)
+	ui.editor_campaign_units = LineEdit.new()
+	campaign_box.add_child(ui.editor_campaign_units)
+
+	var buildings_label: Label = Label.new()
+	buildings_label.text = "Available Buildings (comma-separated)"
+	campaign_box.add_child(buildings_label)
+	ui.editor_campaign_buildings = LineEdit.new()
+	campaign_box.add_child(ui.editor_campaign_buildings)
+
+	var challenge_label: Label = Label.new()
+	challenge_label.text = "Challenge Modes (comma-separated)"
+	campaign_box.add_child(challenge_label)
+	ui.editor_campaign_challenge_modes = LineEdit.new()
+	campaign_box.add_child(ui.editor_campaign_challenge_modes)
+
+	_add_campaign_difficulty_form(campaign_box, "Easy", ui, "easy")
+	_add_campaign_difficulty_form(campaign_box, "Medium", ui, "medium")
+	_add_campaign_difficulty_form(campaign_box, "Hard", ui, "hard")
+
+	var campaign_button_row := HBoxContainer.new()
+	campaign_button_row.add_theme_constant_override("separation", 8)
+	campaign_box.add_child(campaign_button_row)
+	var campaign_save_button := Button.new()
+	campaign_save_button.text = "Apply & Save"
+	campaign_save_button.pressed.connect(main._on_editor_campaign_edit_save_pressed)
+	campaign_button_row.add_child(campaign_save_button)
+	var campaign_cancel_button := Button.new()
+	campaign_cancel_button.text = "Cancel"
+	campaign_cancel_button.pressed.connect(main._on_editor_campaign_edit_cancel_pressed)
+	campaign_button_row.add_child(campaign_cancel_button)
 
 	var back_button: Button = Button.new()
 	back_button.text = "Back to Menu"
@@ -502,3 +605,73 @@ func build_campaign_ui(main: Node, campaign_controller) -> void:
 	level_complete_ui.visible = false
 	main._ui_layer.add_child(level_complete_ui)
 	campaign_controller.set_level_complete_ui(level_complete_ui)
+
+func _add_campaign_difficulty_form(parent: VBoxContainer, title: String, ui: UiController, key: String) -> void:
+	var section_label := Label.new()
+	section_label.text = "%s Difficulty" % title
+	parent.add_child(section_label)
+
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("separation", 6)
+	parent.add_child(grid)
+
+	var spawn := _add_campaign_spinbox(grid, "Spawn Interval", 0.1, 60.0, 0.1)
+	var enemy_hp := _add_campaign_spinbox(grid, "Enemy HP Mult", 0.1, 5.0, 0.1)
+	var enemy_damage := _add_campaign_spinbox(grid, "Enemy Damage Mult", 0.1, 5.0, 0.1)
+	var enemy_base_hp := _add_campaign_spinbox(grid, "Enemy Base HP Mult", 0.1, 5.0, 0.1)
+	var res_wood := _add_campaign_spinbox(grid, "Start Wood", 0, 999, 1)
+	var res_food := _add_campaign_spinbox(grid, "Start Food", 0, 999, 1)
+	var res_stone := _add_campaign_spinbox(grid, "Start Stone", 0, 999, 1)
+	var res_iron := _add_campaign_spinbox(grid, "Start Iron", 0, 999, 1)
+	var star_time := _add_campaign_spinbox(grid, "Star Time (s)", 0, 9999, 10)
+	var star_base_hp := _add_campaign_spinbox(grid, "Star Base HP %", 0, 100, 1)
+	var star_units := _add_campaign_spinbox(grid, "Star Units Lost", 0, 9999, 1)
+
+	if key == "easy":
+		ui.editor_campaign_easy_spawn = spawn
+		ui.editor_campaign_easy_enemy_hp = enemy_hp
+		ui.editor_campaign_easy_enemy_damage = enemy_damage
+		ui.editor_campaign_easy_enemy_base_hp = enemy_base_hp
+		ui.editor_campaign_easy_res_wood = res_wood
+		ui.editor_campaign_easy_res_food = res_food
+		ui.editor_campaign_easy_res_stone = res_stone
+		ui.editor_campaign_easy_res_iron = res_iron
+		ui.editor_campaign_easy_star_time = star_time
+		ui.editor_campaign_easy_star_base_hp = star_base_hp
+		ui.editor_campaign_easy_star_units = star_units
+	elif key == "medium":
+		ui.editor_campaign_medium_spawn = spawn
+		ui.editor_campaign_medium_enemy_hp = enemy_hp
+		ui.editor_campaign_medium_enemy_damage = enemy_damage
+		ui.editor_campaign_medium_enemy_base_hp = enemy_base_hp
+		ui.editor_campaign_medium_res_wood = res_wood
+		ui.editor_campaign_medium_res_food = res_food
+		ui.editor_campaign_medium_res_stone = res_stone
+		ui.editor_campaign_medium_res_iron = res_iron
+		ui.editor_campaign_medium_star_time = star_time
+		ui.editor_campaign_medium_star_base_hp = star_base_hp
+		ui.editor_campaign_medium_star_units = star_units
+	elif key == "hard":
+		ui.editor_campaign_hard_spawn = spawn
+		ui.editor_campaign_hard_enemy_hp = enemy_hp
+		ui.editor_campaign_hard_enemy_damage = enemy_damage
+		ui.editor_campaign_hard_enemy_base_hp = enemy_base_hp
+		ui.editor_campaign_hard_res_wood = res_wood
+		ui.editor_campaign_hard_res_food = res_food
+		ui.editor_campaign_hard_res_stone = res_stone
+		ui.editor_campaign_hard_res_iron = res_iron
+		ui.editor_campaign_hard_star_time = star_time
+		ui.editor_campaign_hard_star_base_hp = star_base_hp
+		ui.editor_campaign_hard_star_units = star_units
+
+func _add_campaign_spinbox(grid: GridContainer, label_text: String, min_value: float, max_value: float, step: float) -> SpinBox:
+	var label := Label.new()
+	label.text = label_text
+	grid.add_child(label)
+	var box := SpinBox.new()
+	box.min_value = min_value
+	box.max_value = max_value
+	box.step = step
+	grid.add_child(box)
+	return box
