@@ -1,0 +1,18 @@
+# ============================================================
+# This file is used by cd-info to display directory information
+# Learn more: https://github.com/wrathagom/cd-info
+# ============================================================
+# --- END CD-INFO HEADER ---
+
+# Quick Commands
+  - `godot .`  Run the game
+  - `godot --headless -s tests/run_tests.gd`  Run tests
+
+# Project Structure
+  - `scenes/`   PackedScene assets (units, buildings, projectiles)
+  - `scripts/`  Gameplay logic (Main, Economy, Placement, UI)
+  - `data/`     Campaign level JSON files
+  - `tests/`    GDScript test runner
+
+# Links
+  - Repo: https://github.com/wrathagom/my-tower-defense
