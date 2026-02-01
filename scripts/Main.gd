@@ -374,13 +374,35 @@ func _build_spawn_buttons() -> void:
 		if not _unit_defs.has(unit_id):
 			continue
 		var def: Dictionary = _unit_defs[unit_id]
+		var button_row := HBoxContainer.new()
+		button_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button_row.add_theme_constant_override("separation", 6)
 		var button := Button.new()
 		var label: String = str(def.get("label", unit_id))
 		var cost_label: String = _unit_cost_label(def)
 		button.text = label if cost_label == "" else "%s (%s)" % [label, cost_label]
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.size_flags_stretch_ratio = 2.0
 		button.pressed.connect(Callable(self, "_spawn_unit_by_id").bind(unit_id))
-		spawn_units_box.add_child(button)
-		_spawn_buttons[unit_id] = button
+		button_row.add_child(button)
+		var button_ten := Button.new()
+		button_ten.text = "+10"
+		button_ten.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button_ten.size_flags_stretch_ratio = 1.0
+		button_ten.pressed.connect(Callable(self, "_spawn_units_by_id").bind(unit_id, 10))
+		button_row.add_child(button_ten)
+		var button_twenty_five := Button.new()
+		button_twenty_five.text = "+25"
+		button_twenty_five.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button_twenty_five.size_flags_stretch_ratio = 1.0
+		button_twenty_five.pressed.connect(Callable(self, "_spawn_units_by_id").bind(unit_id, 25))
+		button_row.add_child(button_twenty_five)
+		spawn_units_box.add_child(button_row)
+		_spawn_buttons[unit_id] = {
+			1: button,
+			10: button_ten,
+			25: button_twenty_five
+		}
 
 func _unit_cost_label(def: Dictionary) -> String:
 	var parts: Array[String] = []
@@ -399,12 +421,20 @@ func _unit_cost_label(def: Dictionary) -> String:
 	return "+".join(parts)
 
 func _spawn_unit_by_id(unit_id: String) -> void:
+	_spawn_units_by_id(unit_id, 1)
+
+func _spawn_units_by_id(unit_id: String, count: int) -> void:
+	if count <= 0:
+		return
 	if not _unit_defs.has(unit_id):
 		return
 	var def: Dictionary = _unit_defs[unit_id]
 	if _unit_spawner == null:
 		return
-	_unit_spawner.spawn_unit(unit_id, def)
+	if _economy == null or not _economy.can_spawn_unit_def_count(def, count):
+		return
+	for i in range(count):
+		_unit_spawner.spawn_unit(unit_id, def)
 
 # Game state methods
 func _reset_game() -> void:

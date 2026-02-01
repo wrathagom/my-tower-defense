@@ -196,6 +196,15 @@ func can_spawn_unit_def(def: Dictionary) -> bool:
 	var iron_cost: int = def.get("iron_cost", 0)
 	return food >= food_cost and wood >= wood_cost and stone >= stone_cost and iron >= iron_cost and current_units < max_units
 
+func can_spawn_unit_def_count(def: Dictionary, count: int) -> bool:
+	if count <= 0:
+		return false
+	var food_cost: int = def.get("food_cost", 0) * count
+	var wood_cost: int = def.get("wood_cost", 0) * count
+	var stone_cost: int = def.get("stone_cost", 0) * count
+	var iron_cost: int = def.get("iron_cost", 0) * count
+	return food >= food_cost and wood >= wood_cost and stone >= stone_cost and iron >= iron_cost and current_units + count <= max_units
+
 func on_unit_spawned() -> void:
 	food = clampi(food - unit_food_cost, 0, max_food)
 	current_units += 1
@@ -299,18 +308,25 @@ func _update_buttons(base_level_value: int) -> void:
 
 func _update_spawn_buttons(base_level_value: int) -> void:
 	for unit_id in spawn_buttons.keys():
-		var button := spawn_buttons[unit_id] as Button
-		if button == null:
-			continue
+		var entry = spawn_buttons[unit_id]
 		var def: Dictionary = unit_defs.get(unit_id, {})
-		if def.is_empty():
-			button.disabled = true
-			button.visible = false
-			continue
-		var unlocked := _requirements_met(def, base_level_value, archery_level)
-		var can_spawn := unlocked and can_spawn_unit_def(def)
-		button.disabled = not can_spawn
-		button.visible = unlocked
+		var buttons_by_count: Dictionary = {}
+		if entry is Button:
+			buttons_by_count[1] = entry
+		elif entry is Dictionary:
+			buttons_by_count = entry
+		for count in buttons_by_count.keys():
+			var button := buttons_by_count[count] as Button
+			if button == null:
+				continue
+			if def.is_empty():
+				button.disabled = true
+				button.visible = false
+				continue
+			var unlocked := _requirements_met(def, base_level_value, archery_level)
+			var can_spawn := unlocked and can_spawn_unit_def_count(def, int(count))
+			button.disabled = not can_spawn
+			button.visible = unlocked
 
 func _update_build_buttons(base_level_value: int) -> void:
 	for building_id in build_buttons.keys():

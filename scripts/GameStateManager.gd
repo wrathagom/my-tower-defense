@@ -92,9 +92,14 @@ func on_game_over(is_player_base: bool) -> void:
 	if _main != null:
 		var spawn_buttons: Dictionary = _main._spawn_buttons
 		for button in spawn_buttons.values():
-			var node := button as Button
-			if node != null:
-				node.disabled = true
+			if button is Button:
+				button.disabled = true
+				continue
+			if button is Dictionary:
+				for entry in button.values():
+					var node := entry as Button
+					if node != null:
+						node.disabled = true
 	if _ui != null:
 		_ui.set_game_over_visible(true)
 		_ui.set_game_over_text("You Lose" if is_player_base else "You Win")
